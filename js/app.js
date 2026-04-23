@@ -1,4 +1,4 @@
-﻿//  STORAGE
+//  STORAGE
 // ═══════════════════════════════════════════════
 const APP_VERSION = '0.5.8';
 const STORE_KEY   = 'cubetimer_v1';
@@ -300,7 +300,8 @@ function playTripleBip() {
   setTimeout(() => playBip(660, 0.1, 0.4), 300);
 }
 function showPenalties(show) {
-  document.getElementById('card-penalties').style.display = show ? 'block' : 'none';
+  // O card de penalidades permanece visível; no foco ele some junto com os painéis laterais.
+  document.getElementById('card-penalties').style.display = 'block';
 }
 
 function setTimerState(s) {
@@ -618,13 +619,110 @@ elSession.addEventListener('change', () => {
 });
 
 document.getElementById('btn-new-session').addEventListener('click', () => {
-  const name = prompt('Nome da nova sessão:')?.trim();
-  if (!name) return;
-  if (data.sessions[name]) { showToast('Sessão já existe.'); return; }
-  data.sessions[name] = [];
-  data.active = name;
-  storageSave(data);
-  renderAll();
+  openSessionNameModal('new');
+});
+
+document.getElementById('btn-rename-session').addEventListener('click', () => {
+  openSessionNameModal('rename');
+});
+
+let sessionNameModalMode = null; // 'new' | 'rename'
+let sessionNameOriginal = '';
+
+function openSessionNameModal(mode) {
+  const overlay = document.getElementById('session-name-overlay');
+  const title = document.getElementById('session-name-title');
+  const input = document.getElementById('session-name-input');
+  const help = document.getElementById('session-name-help');
+  const confirmBtn = document.getElementById('btn-confirm-session-name');
+
+  if (mode === 'rename') {
+    const currentName = data.active;
+    if (!currentName || !data.sessions[currentName]) return;
+    sessionNameOriginal = currentName;
+    sessionNameModalMode = 'rename';
+    title.textContent = 'Renomear sessão';
+    help.textContent = `Nome atual: "${currentName}"`;
+    confirmBtn.textContent = 'Renomear';
+    input.value = currentName;
+  } else {
+    sessionNameOriginal = '';
+    sessionNameModalMode = 'new';
+    title.textContent = 'Nova sessão';
+    help.textContent = 'Escolha um nome para criar uma nova sessão.';
+    confirmBtn.textContent = 'Criar sessão';
+    input.value = '';
+  }
+
+  overlay.style.display = 'flex';
+  setTimeout(() => {
+    input.focus();
+    input.select();
+  }, 0);
+}
+
+function closeSessionNameModal() {
+  document.getElementById('session-name-overlay').style.display = 'none';
+  sessionNameModalMode = null;
+  sessionNameOriginal = '';
+}
+
+function confirmSessionNameModal() {
+  const input = document.getElementById('session-name-input');
+  const name = input.value.trim();
+
+  if (!name) {
+    showToast('Digite um nome válido para a sessão.');
+    input.focus();
+    return;
+  }
+
+  if (sessionNameModalMode === 'new') {
+    if (data.sessions[name]) {
+      showToast('Sessão já existe.');
+      input.focus();
+      input.select();
+      return;
+    }
+    data.sessions[name] = [];
+    data.active = name;
+    storageSave(data);
+    renderAll();
+    closeSessionNameModal();
+    showToast(`Sessão "${name}" criada.`);
+    return;
+  }
+
+  if (sessionNameModalMode === 'rename') {
+    if (!sessionNameOriginal || !data.sessions[sessionNameOriginal]) {
+      closeSessionNameModal();
+      return;
+    }
+    if (name === sessionNameOriginal) {
+      closeSessionNameModal();
+      return;
+    }
+    if (data.sessions[name]) {
+      showToast('Já existe uma sessão com esse nome.');
+      input.focus();
+      input.select();
+      return;
+    }
+    data.sessions[name] = data.sessions[sessionNameOriginal];
+    delete data.sessions[sessionNameOriginal];
+    data.active = name;
+    storageSave(data);
+    renderAll();
+    closeSessionNameModal();
+    showToast(`Sessão renomeada para "${name}".`);
+  }
+}
+
+document.getElementById('session-name-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    confirmSessionNameModal();
+  }
 });
 
 document.getElementById('btn-clear').addEventListener('click', () => {
@@ -1611,35 +1709,36 @@ function showPage(page) {
   }
 }
 
+function applyDedicatedMobileLayout() {
+  if (!document.documentElement.classList.contains('mobile-mode')) return;
+
+  const panelCenter = document.querySelector('.panel-center .center-inner');
+  const panelRight = document.querySelector('.panel-right');
+  const historyCard = document.querySelector('.history-card');
+  const statsCard = document.getElementById('stats-card');
+  const penaltiesCard = document.getElementById('card-penalties');
+
+  if (panelCenter && penaltiesCard) {
+    panelCenter.appendChild(penaltiesCard);
+  }
+  if (panelRight && historyCard && statsCard) {
+    panelRight.insertBefore(statsCard, historyCard);
+  }
+}
+
 // ═══════════════════════════════════════════════
 //  SISTEMA DE RANK
 // ═══════════════════════════════════════════════
 const RANKS = [
-  { name: 'Ferro',       div: 'I',   icon: '🪨', color: '#8B7355', min: 90*1000,       max: 999*60*1000 },
-  { name: 'Ferro',       div: 'II',  icon: '🪨', color: '#8B7355', min: 75*1000,       max: 90*1000     },
-  { name: 'Ferro',       div: 'III', icon: '🪨', color: '#8B7355', min: 61*1000,       max: 75*1000     },
-  { name: 'Bronze',      div: 'I',   icon: '🥉', color: '#cd7f32', min: 57*1000,       max: 61*1000     },
-  { name: 'Bronze',      div: 'II',  icon: '🥉', color: '#cd7f32', min: 54*1000,       max: 57*1000     },
-  { name: 'Bronze',      div: 'III', icon: '🥉', color: '#cd7f32', min: 51*1000,       max: 54*1000     },
-  { name: 'Prata',       div: 'I',   icon: '🥈', color: '#aab0b8', min: 47*1000,       max: 51*1000     },
-  { name: 'Prata',       div: 'II',  icon: '🥈', color: '#aab0b8', min: 44*1000,       max: 47*1000     },
-  { name: 'Prata',       div: 'III', icon: '🥈', color: '#aab0b8', min: 41*1000,       max: 44*1000     },
-  { name: 'Ouro',        div: 'I',   icon: '🥇', color: '#f5c800', min: 37*1000,       max: 41*1000     },
-  { name: 'Ouro',        div: 'II',  icon: '🥇', color: '#f5c800', min: 34*1000,       max: 37*1000     },
-  { name: 'Ouro',        div: 'III', icon: '🥇', color: '#f5c800', min: 31*1000,       max: 34*1000     },
-  { name: 'Platina',     div: 'I',   icon: '💠', color: '#4fd1c5', min: 29*1000,       max: 31*1000     },
-  { name: 'Platina',     div: 'II',  icon: '💠', color: '#4fd1c5', min: 28*1000,       max: 29*1000     },
-  { name: 'Platina',     div: 'III', icon: '💠', color: '#4fd1c5', min: 26*1000,       max: 28*1000     },
-  { name: 'Diamante',    div: 'I',   icon: '💎', color: '#7dd3fc', min: 24*1000,       max: 26*1000     },
-  { name: 'Diamante',    div: 'II',  icon: '💎', color: '#7dd3fc', min: 23*1000,       max: 24*1000     },
-  { name: 'Diamante',    div: 'III', icon: '💎', color: '#7dd3fc', min: 21*1000,       max: 23*1000     },
-  { name: 'Ascendente',  div: 'I',   icon: '🔺', color: '#86efac', min: 19*1000,       max: 21*1000     },
-  { name: 'Ascendente',  div: 'II',  icon: '🔺', color: '#86efac', min: 18*1000,       max: 19*1000     },
-  { name: 'Ascendente',  div: 'III', icon: '🔺', color: '#86efac', min: 16*1000,       max: 18*1000     },
-  { name: 'Imortal',     div: 'I',   icon: '🔥', color: '#f87171', min: 14*1000,       max: 16*1000     },
-  { name: 'Imortal',     div: 'II',  icon: '🔥', color: '#f87171', min: 13*1000,       max: 14*1000     },
-  { name: 'Imortal',     div: 'III', icon: '🔥', color: '#f87171', min: 11*1000,       max: 13*1000     },
-  { name: 'Master Cuber',div: '',    icon: '👑', color: '#d4f244', min: 0,             max: 11*1000     },
+  { name: 'Iniciante',   icon: '🪨', color: '#8B7355', min: 61*1000,       max: 999*60*1000 },
+  { name: 'Aprendiz',    icon: '🥉', color: '#cd7f32', min: 51*1000,       max: 61*1000     },
+  { name: 'Cuber',       icon: '🥈', color: '#aab0b8', min: 41*1000,       max: 51*1000     },
+  { name: 'Cuber Pro',   icon: '🥇', color: '#f5c800', min: 31*1000,       max: 41*1000     },
+  { name: 'Speed Cuber', icon: '💠', color: '#4fd1c5', min: 26*1000,       max: 31*1000     },
+  { name: 'Elite Cuber', icon: '💎', color: '#7dd3fc', min: 21*1000,       max: 26*1000     },
+  { name: 'Expert Cuber',icon: '🔺', color: '#86efac', min: 16*1000,       max: 21*1000     },
+  { name: 'Legend Cuber',icon: '🔥', color: '#f87171', min: 11*1000,       max: 16*1000     },
+  { name: 'Master Cuber',icon: '👑', color: '#d4f244', min: 0,             max: 11*1000     },
 ];
 
 function getRank(avgMs) {
@@ -1703,7 +1802,7 @@ function updateRankWidget() {
   _lastRankIndex = rank.index;
   saveLastRankIndex(_lastRankIndex);
 
-  // Quanto mais perto do min (tempo mais rápido), mais cheio o RR
+  // Quanto mais perto do min (tempo mais rápido), maior o progresso
   let pct = 0;
   if (!isMaster) {
     const range = rank.max - rank.min;
@@ -1714,7 +1813,7 @@ function updateRankWidget() {
 
   document.getElementById('rank-emblem').textContent = rank.icon;
   document.getElementById('rank-name').textContent   = rank.name;
-  document.getElementById('rank-div').textContent    = isMaster ? '🏆 Nível máximo' : `Divisão ${rank.div} — ${pct} RR`;
+  document.getElementById('rank-div').textContent    = isMaster ? '🏆 Nível máximo' : `Progresso no rank: ${pct}%`;
   document.getElementById('rank-bar-fill').style.width = pct + '%';
   document.getElementById('rank-bar-low').textContent  = isMaster ? '' : fmtTime(rank.max);
   document.getElementById('rank-bar-high').textContent = isMaster ? '' : fmtTime(rank.min);
@@ -1724,14 +1823,14 @@ function updateRankWidget() {
 
 // ── Celebração de Rank Up ──────────────────────
 const RANKUP_MSGS = {
-  'Ferro':        'Boa largada! Continue resolvendo para subir mais.',
-  'Bronze':       'Você saiu do Ferro! O caminho para o topo começa aqui.',
-  'Prata':        'Bronze superado! Sua consistência está aparecendo.',
-  'Ouro':         'Você chegou ao Ouro! Poucos cubers chegam tão longe.',
-  'Platina':      'Platina! Você já está entre os cubers avançados.',
-  'Diamante':     'Diamante! Seus dedos já sabem o caminho.',
-  'Ascendente':   'Ascendente! Você está dominando o cubo.',
-  'Imortal':      'IMORTAL! Você é uma lenda do cubo. Sub-16 consistente!',
+  'Iniciante':    'Boa largada! Continue resolvendo para subir mais.',
+  'Aprendiz':     'Evolucao constante! Seu progresso esta aparecendo.',
+  'Cuber':        'Voce entrou no nivel Cuber! Consistencia em alta.',
+  'Cuber Pro':    'Cuber Pro alcancado! Sua tecnica esta ficando afiada.',
+  'Speed Cuber':  'Speed Cuber! Seus movimentos estao cada vez mais rapidos.',
+  'Elite Cuber':  'Elite Cuber! Excelente controle e bom ritmo de solve.',
+  'Expert Cuber': 'Expert Cuber! Voce esta muito perto do topo.',
+  'Legend Cuber': 'Legend Cuber! Nivel altissimo de speedcubing.',
   'Master Cuber': '👑 MASTER CUBER! O nível mais alto. Perfeição.',
 };
 
@@ -1813,7 +1912,7 @@ function showRankUp(rank, isFirst = false) {
   card.style.setProperty('--rankup-color', rank.color);
   document.getElementById('rankup-icon').textContent = rank.icon;
   document.getElementById('rankup-name').textContent = rank.name;
-  document.getElementById('rankup-div').textContent  = isMaster ? '👑 Nível Máximo' : `Divisão ${rank.div}`;
+  document.getElementById('rankup-div').textContent  = isMaster ? '👑 Nível Máximo' : '';
   document.getElementById('rankup-msg').textContent  = isFirst
     ? 'Você completou 3 resoluções e entrou no ranking. Continue melhorando!'
     : (RANKUP_MSGS[rank.name] || 'Parabéns pela promoção!');
@@ -1888,7 +1987,7 @@ async function pingPresence() {
     nickname   : myProfile.nickname,
     avatar     : myProfile.avatar,
     rank_name  : rank ? rank.name : null,
-    rank_div   : rank ? rank.div  : null,
+    rank_div   : null,
     rank_icon  : rank ? rank.icon : null,
     rank_color : rank ? rank.color: null,
     last_seen  : new Date().toISOString()
@@ -1914,7 +2013,7 @@ function renderOnlineList(rows) {
   if (!rows.length) { el.innerHTML = '<div style="font-size:13px;color:var(--muted);text-align:center;padding:16px">Ninguém online</div>'; return; }
   el.innerHTML = rows.map(p => {
     const isMe = p.id === MY_ID;
-    const rankStr = p.rank_name ? `${p.rank_icon || ''} ${p.rank_name}${p.rank_div ? ' '+p.rank_div : ''}` : 'Sem rank';
+    const rankStr = p.rank_name ? `${p.rank_icon || ''} ${p.rank_name}` : 'Sem rank';
     return `<div class="online-player ${isMe ? 'is-me' : ''}">
       <div class="op-avatar ${isMe ? 'is-me' : ''}" style="${p.rank_color ? 'border-color:'+p.rank_color : ''}">${p.avatar}</div>
       <div class="op-info">
@@ -2399,6 +2498,7 @@ function toggleSettings() {
 }
 
 newScramble();
+applyDedicatedMobileLayout();
 renderAll();
 updateScramblePreview();
 initScramblePreviewState();
