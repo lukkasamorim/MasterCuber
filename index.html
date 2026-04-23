@@ -4,6 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CubeTimer</title>
+  <script>
+    (function() {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('view') === 'mobile') {
+        document.documentElement.classList.add('mobile-mode');
+      }
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/styles.css" />
@@ -31,18 +39,19 @@
   <section class="panel panel-left">
 
     <!-- Card de Sessão -->
-    <div class="card">
+    <div class="card session-card">
       <div class="card-header">
         <span class="plabel">SESSÃO</span>
-        <div style="display:flex;gap:6px">
+        <div class="session-actions">
           <button class="btn btn-sm btn-ghost" id="btn-new-session" title="Nova sessão">+ Nova</button>
+          <button class="btn btn-sm btn-ghost" id="btn-rename-session" title="Renomear sessão">✏️</button>
           <button class="btn btn-sm btn-ghost btn-danger" id="btn-clear" title="Limpar sessão">Limpar</button>
           <button class="btn btn-sm btn-ghost btn-danger" id="btn-delete-session" title="Excluir sessão">🗑</button>
         </div>
       </div>
       <select id="sel-session" style="width:100%;margin-top:2px"></select>
     </div>
-    <div class="card">
+    <div class="card" id="stats-card">
       <div class="card-header"><span class="plabel">ESTATÍSTICAS</span></div>
       <div class="stats-grid">
         <div class="stat-item"><span class="stat-val" id="s-count">0</span><span class="stat-lbl">Tempos</span></div>
@@ -58,22 +67,22 @@
       </div>
     </div>
 
-  </section>
-
-  <!-- Penalidades (entre timer e painel esquerdo) -->
-  <div class="card" id="card-penalties" style="display:none">
-    <div class="card-header"><span class="plabel">ÚLTIMA SOLVE</span></div>
-    <div class="penalties-grid">
-      <button class="penalty-btn penalty-p2" id="btn-plus2" onclick="applyPlus2()">
-        <span class="penalty-label">+2</span>
-        <span class="penalty-sub">penalidade</span>
-      </button>
-      <button class="penalty-btn penalty-dnf" id="btn-dnf" onclick="applyDNF()">
-        <span class="penalty-label">DNF</span>
-        <span class="penalty-sub">did not finish</span>
-      </button>
+    <!-- Penalidades -->
+    <div class="card" id="card-penalties">
+      <div class="card-header"><span class="plabel">ÚLTIMA SOLVE</span></div>
+      <div class="penalties-grid">
+        <button class="penalty-btn penalty-p2" id="btn-plus2" onclick="applyPlus2()">
+          <span class="penalty-label">+2</span>
+          <span class="penalty-sub">penalidade</span>
+        </button>
+        <button class="penalty-btn penalty-dnf" id="btn-dnf" onclick="applyDNF()">
+          <span class="penalty-label">DNF</span>
+          <span class="penalty-sub">did not finish</span>
+        </button>
+      </div>
     </div>
-  </div>
+
+  </section>
 
   <!-- Centro -->
   <section class="panel panel-center">
@@ -168,6 +177,24 @@
     <div class="modal-footer" style="justify-content:space-between;">
       <button class="btn btn-sm btn-ghost" onclick="closeClearSession()">Cancelar</button>
       <button class="btn btn-sm" style="background:var(--danger);color:#fff;border-color:var(--danger);" onclick="confirmClearSession()">Limpar sessão</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="session-name-overlay" style="display:none" onclick="closeSessionNameModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title" id="session-name-title">Nova sessão</span>
+      <button class="btn btn-ghost btn-sm" onclick="closeSessionNameModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <label class="modal-label" for="session-name-input">Nome da sessão</label>
+      <input class="modal-input" id="session-name-input" type="text" maxlength="40" placeholder="Digite o nome da sessão..." />
+      <p id="session-name-help" style="font-size:12px;color:var(--muted);margin-top:8px;line-height:1.6;"></p>
+    </div>
+    <div class="modal-footer" style="justify-content:space-between;">
+      <button class="btn btn-sm btn-ghost" onclick="closeSessionNameModal()">Cancelar</button>
+      <button class="btn btn-sm" id="btn-confirm-session-name" onclick="confirmSessionNameModal()">Salvar</button>
     </div>
   </div>
 </div>
