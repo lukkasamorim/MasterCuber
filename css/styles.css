@@ -1,4 +1,4 @@
-﻿    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
       --bg:       #0d0d0d;
@@ -59,6 +59,8 @@
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rl); padding: 14px; }
     .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
     .plabel { font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px; color: var(--muted); }
+    .session-card .card-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+    .session-card .session-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-start; width: 100%; }
 
     /* Scramble */
     .scramble-text { font-family: var(--mono); font-size: 13px; line-height: 1.9; word-break: break-all; }
@@ -73,7 +75,7 @@
     .panel-center { display: flex; align-items: stretch; justify-content: center; padding: 0; position: relative; }
     .center-inner { display: flex; flex-direction: column; width: 100%; height: 100%; }
     .scramble-center-card { display: flex; flex-direction: column; width: 100%; background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 32px; border-radius: 0; }
-    .scramble-center-card .scramble-text { font-size: clamp(15px, 1.4vw, 19px); line-height: 1.8; text-align: center; letter-spacing: 1px; }
+    .scramble-center-card .scramble-text { font-size: clamp(18px, 1.9vw, 24px); line-height: 1.8; text-align: center; letter-spacing: 1px; }
     .timer-area { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; user-select: none; cursor: default; flex: 1; }
     .timer-display { font-family: var(--mono); font-size: clamp(56px, 9vw, 108px); font-weight: 700; letter-spacing: -3px; line-height: 1; transition: color .12s; }
     .timer-display.idle       { color: var(--text); }
@@ -200,7 +202,7 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(to bottom, rgba(0,0,0,.35), transparent 45%, rgba(0,0,0,.55));
+  background: linear-gradient(to bottom, rgba(0,0,0,.22), transparent 45%, rgba(0,0,0,.35));
   pointer-events: none;
 }
 .login-inner {
@@ -232,7 +234,7 @@
 }
 .login-hero-icon { font-size: 64px; line-height: 1; }
 .login-hero-title { font-family: var(--mono); font-weight: 700; font-size: 26px; }
-.login-hero-sub { font-size: 14px; color: var(--muted); line-height: 1.7; }
+.login-hero-sub { font-size: 14px; color: #ffffff; line-height: 1.7; }
 
 .login-grid {
   display: grid;
@@ -242,8 +244,8 @@
 
 .mode-card {
   text-align: left;
-  border: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
+  border: 1px solid rgba(255,255,255,.14);
+  background: linear-gradient(180deg, rgba(24,24,24,.96), rgba(17,17,17,.95));
   border-radius: 18px;
   padding: 16px 16px 14px;
   cursor: pointer;
@@ -251,8 +253,8 @@
 }
 .mode-card:hover {
   transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--accent) 30%, var(--border2));
-  background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.015));
+  border-color: color-mix(in srgb, var(--accent) 40%, rgba(255,255,255,.16));
+  background: linear-gradient(180deg, rgba(28,28,28,.98), rgba(19,19,19,.97));
 }
 .mode-card:active { transform: translateY(0); }
 .mode-top { display: flex; align-items: center; gap: 10px; }
@@ -265,25 +267,25 @@
   font-size: 20px;
   flex-shrink: 0;
 }
-.mode-title { font-family: var(--mono); font-size: 16px; font-weight: 700; }
+.mode-title { font-family: var(--mono); font-size: 16px; font-weight: 700; color: #ffffff; }
 .mode-pill {
   margin-left: auto;
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 1px;
-  color: var(--muted);
+  color: #ffffff;
   background: rgba(0,0,0,.25);
-  border: 1px solid rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.14);
   padding: 4px 9px;
   border-radius: 999px;
   text-transform: uppercase;
 }
-.mode-desc { margin-top: 10px; font-size: 13px; color: color-mix(in srgb, var(--text) 75%, var(--muted)); line-height: 1.6; }
+.mode-desc { margin-top: 10px; font-size: 13px; color: #ffffff; line-height: 1.6; }
 .mode-cta {
   margin-top: 12px;
   font-family: var(--mono);
   font-size: 12px;
-  color: var(--accent);
+  color: #ffffff;
 }
 
 .mode-timer .mode-icon  { background: color-mix(in srgb, var(--accent) 14%, rgba(0,0,0,.25)); border-color: color-mix(in srgb, var(--accent) 20%, rgba(255,255,255,.06)); }
@@ -366,7 +368,7 @@
     /* ── Painel Online ── */
     .online-panel {
       position: fixed; top: 58px; right: 16px; z-index: 200;
-      background: var(--surface); border: 1px solid var(--border2);
+      background: rgba(20,20,20,.98); border: 1px solid rgba(255,255,255,.18);
       border-radius: var(--rl); width: 260px;
       box-shadow: 0 8px 32px rgba(0,0,0,.5);
       display: flex; flex-direction: column; overflow: hidden;
@@ -379,15 +381,15 @@
     .online-player {
       display: flex; align-items: center; gap: 10px;
       padding: 8px 10px; border-radius: var(--r);
-      background: var(--surface2); border: 1px solid transparent;
+      background: rgba(34,34,34,.95); border: 1px solid rgba(255,255,255,.08);
       transition: border-color .15s;
     }
     .online-player.is-me { border-color: rgba(212,242,68,.3); }
     .op-avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; border: 2px solid var(--border2); }
     .op-avatar.is-me { border-color: var(--accent); }
     .op-info { flex: 1; min-width: 0; }
-    .op-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .op-rank { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+    .op-name { font-size: 13px; font-weight: 600; color: color-mix(in srgb, var(--text) 98%, white); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .op-rank { font-size: 11px; color: color-mix(in srgb, var(--text) 80%, var(--muted)); font-family: var(--mono); }
     .op-you { font-size: 10px; color: var(--accent); font-family: var(--mono); }
 
     /* ── Modal ── */
@@ -415,17 +417,7 @@
       transition: border-color .3s;
     }
 
-    /* Card penalties fora do painel — desktop: posição fixa no canto esquerdo */
-    @media (min-width: 761px) {
-      #card-penalties {
-        position: fixed;
-        bottom: 24px;
-        left: 24px;
-        z-index: 50;
-        width: 232px;
-        box-shadow: 0 4px 24px rgba(0,0,0,.4);
-      }
-    }
+    #card-penalties { display: block; }
     .rank-top { display: flex; align-items: center; gap: 14px; }
     .rank-emblem {
       width: 52px; height: 52px; border-radius: 50%;
@@ -445,96 +437,97 @@
     .rank-bar-fill { height: 100%; border-radius: 99px; background: var(--rank-color, var(--accent)); transition: width .6s cubic-bezier(.4,0,.2,1); }
     .rank-avg { font-size: 11px; color: var(--muted); font-family: var(--mono); text-align: center; }
 
-    /* ── Responsive Mobile ── */
-    @media (max-width: 760px) {
-      /* Header */
-      .header { padding: 10px 14px; gap: 8px; }
+    /* ── Responsive Mobile / Tablet ── */
+    @media (max-width: 1024px) {
+      .header { padding: 10px 12px; gap: 6px; }
       .logo { font-size: 14px; }
-      .header-right { gap: 6px; }
-      .header-right .btn { font-size: 11px; padding: 5px 10px; }
+      .header-right { gap: 4px; }
+      .header-right .btn { font-size: 11px; padding: 5px 8px; }
 
-      /* Layout principal — coluna única com ordem repensada */
       .layout {
-        display: flex; flex-direction: column;
-        height: auto; min-height: calc(100vh - 49px);
+        display: flex !important;
+        flex-direction: column !important;
+        height: auto !important;
+        min-height: calc(100vh - 49px);
       }
+      .panel { width: 100%; padding: 12px; gap: 10px; }
+      .panel-left, .panel-right { border: none !important; overflow: visible; }
 
-      /* Centro vem primeiro: timer + scramble em destaque */
-      .panel-center {
-        order: 1;
-        min-height: 52vh;
-        padding: 0;
-        border-bottom: 1px solid var(--border);
-      }
+      /* Ordem fixa no mobile */
+      .panel-left { order: 1; }
+      .panel-center { order: 2; min-height: 58vh; padding: 0; border-bottom: 1px solid var(--border); }
+      .panel-right { order: 3; }
+
       .center-inner { height: 100%; }
-      .scramble-center-card {
-        padding: 12px 16px 10px;
-      }
+      .scramble-center-card { padding: 12px 14px 10px; }
       .scramble-center-card .scramble-text {
-        font-size: 13px; letter-spacing: 0.5px; line-height: 1.7;
+        font-size: clamp(19px, 5.2vw, 26px);
+        line-height: 1.7;
+        letter-spacing: .4px;
+        text-align: left;
+        word-break: break-word;
       }
-      .timer-area { gap: 10px; padding: 0 16px 16px; }
-      .timer-display { font-size: clamp(64px, 18vw, 96px); }
-      .timer-hint { font-size: 12px; text-align: center; }
+      .timer-area { gap: 12px; padding: 10px 12px 22px; min-height: 40vh; }
+      .timer-display { font-size: clamp(74px, 21vw, 118px) !important; letter-spacing: -2px; }
+      .timer-hint { font-size: 13px; line-height: 1.5; text-align: center; }
 
-      /* Penalidades ficam abaixo do timer no mobile */
-      #card-penalties {
-        order: 2;
-        margin: 0; border-radius: 0;
-        border-left: none; border-right: none;
-        border-top: none;
+      .card { padding: 14px; border-radius: 14px; }
+      .card-header { margin-bottom: 10px; }
+
+      .session-card .session-actions { gap: 8px; }
+      .session-card .session-actions .btn {
+        font-size: 12px;
+        padding: 6px 10px;
+        min-height: 34px;
       }
-      .penalties-grid { gap: 8px; padding: 2px 0; }
-      .penalty-btn { padding: 10px 8px; }
-      .penalty-label { font-size: 18px; }
+      #sel-session { min-height: 38px; font-size: 14px; }
 
-      /* Painel esquerdo — stats e sessão */
-      .panel-left {
-        order: 3;
-        border: none; border-bottom: 1px solid var(--border);
-        overflow: visible;
-      }
-      /* Stats em grid 3 colunas no mobile */
-      .stats-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
-      .stat-item { padding: 8px 6px; }
-      .stat-val { font-size: 13px; }
-      .stat-lbl { font-size: 10px; }
+      .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+      .stat-item { padding: 11px 9px; }
+      .stat-val { font-size: 15px; }
+      .stat-lbl { font-size: 11px; }
 
-      /* Histórico */
-      .panel-right {
-        order: 4;
-        border: none; border-bottom: 1px solid var(--border);
-        overflow: visible;
-      }
-      .history-card { min-height: auto; overflow: visible; }
-      .history-list { overflow-y: visible; max-height: none; flex: none; }
-      .history-table { font-size: 12px; }
-      .history-table th, .history-table td { padding: 6px 4px; }
-      .history-table td.td-time { font-size: 13px; }
-      .history-table .hi-del { opacity: 0.6; }
+      #card-penalties { margin: 0; }
+      .penalties-grid { gap: 10px; }
+      .penalty-btn { min-height: 64px; padding: 10px 8px; }
+      .penalty-label { font-size: 21px; }
 
-      /* Rank widget integrado no fluxo */
-      .rank-widget {
-        position: static !important;
-        bottom: auto; left: auto;
-        width: 100%; border-radius: 0;
-        border-left: none; border-right: none; border-bottom: none;
-        box-shadow: none !important;
-        order: 5;
-      }
+      .history-card { min-height: auto; }
+      .history-list { max-height: 48vh; overflow-y: auto; }
+      .history-table { font-size: 13px; }
+      .history-table th, .history-table td { padding: 7px 5px; }
+      .history-table td.td-time { font-size: 14px; }
 
-      /* Modal de perfil e detalhes — full width mobile */
-      .modal { width: calc(100vw - 32px); max-width: 100%; }
-      .solve-detail-modal { width: calc(100vw - 32px); }
+      #rank-widget { position: static !important; width: 100%; }
+      .rank-top { gap: 10px; }
+      .rank-name { font-size: 18px; }
+      .rank-div, .rank-avg, .rank-bar-info { font-size: 12px; }
 
-      /* Online panel */
-      .online-panel { width: calc(100vw - 32px); right: 16px; left: 16px; }
+      /* Estado do scramble logo após o timer */
+      .scramble-preview { width: 100%; order: 1; }
+      .history-card { order: 2; }
+      #rank-widget { order: 3; }
+      .scramble-preview #scramble-net { width: 100%; overflow-x: auto; }
 
-      /* Modo foco no mobile */
+      .modal { width: calc(100vw - 24px); max-width: 420px; }
+      .solve-detail-modal { width: calc(100vw - 24px); max-width: 420px; }
+
+      .online-panel { top: 52px; left: 10px; right: 10px; width: auto; max-width: none; }
+
       .layout.focus-mode .panel-left,
       .layout.focus-mode .panel-right { display: none; }
       .layout.focus-mode #card-penalties { display: none !important; }
       .layout.focus-mode .panel-center { min-height: 100vh; }
+    }
+
+    @media (max-width: 600px) {
+      .panel { padding: 10px; }
+      .scramble-center-card { padding: 10px 10px 8px; }
+      .scramble-center-card .scramble-text { font-size: clamp(18px, 5.7vw, 24px); }
+      .timer-display { font-size: clamp(68px, 23vw, 108px) !important; }
+      .session-card .session-actions .btn { font-size: 11px; padding: 5px 8px; min-height: 32px; }
+      .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .history-list { max-height: 42vh; }
     }
 
     /* ── Página Aprender ── */
@@ -889,4 +882,53 @@
     .hold-btn { padding: 8px; border-radius: var(--r); border: 1px solid var(--border2); background: var(--surface2); color: var(--text); cursor: pointer; text-align: center; font-family: var(--mono); font-size: 12px; transition: border-color .15s; }
     .hold-btn:hover { background: #2a2a2a; }
     .hold-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(212,242,68,.06); }
+
+    /* ── Dedicated mobile view (opened via mobile.html) ── */
+    .mobile-mode body { overflow-x: hidden; }
+    .mobile-mode .layout {
+      display: flex !important;
+      flex-direction: column !important;
+      height: auto !important;
+      min-height: calc(100vh - 49px);
+    }
+    .mobile-mode .panel { width: 100%; padding: 10px; gap: 10px; }
+    .mobile-mode .panel-left,
+    .mobile-mode .panel-right { border: none !important; overflow: visible; }
+    .mobile-mode .panel-left { order: 1; }
+    .mobile-mode .panel-center { order: 2; min-height: 60vh; padding: 0; }
+    .mobile-mode .panel-right { order: 3; }
+
+    .mobile-mode .scramble-center-card {
+      padding: 12px 10px 8px;
+      margin: 0 10px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--surface);
+    }
+    .mobile-mode .scramble-center-card .scramble-text {
+      font-size: clamp(18px, 5.8vw, 25px);
+      line-height: 1.7;
+      text-align: left;
+      word-break: break-word;
+    }
+    .mobile-mode .timer-area { min-height: 42vh; padding: 10px 10px 22px; }
+    .mobile-mode .timer-display { font-size: clamp(74px, 24vw, 120px) !important; }
+    .mobile-mode .timer-hint { font-size: 13px; line-height: 1.5; text-align: center; }
+    .mobile-mode .panel-center #card-penalties { margin: 0 10px 12px; }
+
+    .mobile-mode .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .mobile-mode .session-card .session-actions .btn {
+      font-size: 12px;
+      padding: 6px 10px;
+      min-height: 34px;
+    }
+
+    .mobile-mode .scramble-preview { order: 1; width: 100%; }
+    .mobile-mode #stats-card { order: 2; }
+    .mobile-mode .history-card { order: 3; }
+    .mobile-mode #rank-widget { order: 4; width: 100%; }
+
+    .mobile-mode .layout.focus-mode .panel-left,
+    .mobile-mode .layout.focus-mode .panel-right { display: none; }
+    .mobile-mode .layout.focus-mode #card-penalties { display: none !important; }
 
