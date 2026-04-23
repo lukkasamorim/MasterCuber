@@ -662,27 +662,34 @@
       100% { transform: translateY(420px) rotate(720deg); opacity: 0; }
     }
     /* ── Painel de Configurações ── */
-    .settings-btn {
-      position: fixed; bottom: 24px; right: 24px; z-index: 200;
-      width: 44px; height: 44px; border-radius: 50%;
-      background: var(--surface); border: 1px solid var(--border2);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 18px; cursor: pointer;
-      box-shadow: 0 4px 20px rgba(0,0,0,.5);
-      transition: transform .2s, border-color .2s;
-    }
-    .settings-btn:hover { transform: rotate(45deg); border-color: var(--accent); }
+    /* Botão de configs no header */
+    #settings-btn:hover { color: var(--accent); }
 
+    /* Overlay tela cheia */
     .settings-panel {
-      position: fixed; bottom: 80px; right: 24px; z-index: 200;
-      width: 320px; max-height: 80vh; overflow-y: auto;
-      background: var(--surface); border: 1px solid var(--border2);
-      border-radius: var(--rl); box-shadow: 0 8px 40px rgba(0,0,0,.6);
+      position: fixed; inset: 0; z-index: 500;
+      background: var(--bg);
       display: none; flex-direction: column;
+      overflow: hidden;
+      animation: settingsFadeIn .18s ease;
+    }
+    @keyframes settingsFadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
     }
     .settings-panel.open { display: flex; }
     .settings-panel::-webkit-scrollbar { width: 4px; }
     .settings-panel::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+
+    /* Conteúdo interno scrollável centralizado */
+    .settings-panel > div:last-child {
+      flex: 1; overflow-y: auto;
+      scrollbar-width: thin; scrollbar-color: var(--border2) transparent;
+    }
+    .settings-section {
+      padding: 20px 24px; border-bottom: 1px solid var(--border);
+      max-width: 640px; margin: 0 auto; width: 100%;
+    }
 
     .settings-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); }
     .settings-header-title { font-family: var(--mono); font-size: 13px; font-weight: 700; }
@@ -740,7 +747,7 @@
 <header class="header">
   <div class="header-left">
     <span class="logo">CubeTimer</span>
-    <span class="vbadge">v1.5.4</span>
+    <span class="vbadge">v1.5.6</span>
   </div>
   <div class="header-right">
     <button class="btn btn-ghost btn-sm" id="btn-show-preview" onclick="toggleScramblePreview()" title="Mostrar prévia do scramble" style="display:none">⬛ Prévia</button>
@@ -750,6 +757,7 @@
       <span class="online-dot"></span>
       <span id="online-count">0</span> online
     </button>
+    <button class="btn btn-ghost btn-sm" id="settings-btn" onclick="toggleSettings()" title="Configurações">⚙️</button>
   </div>
 </header>
 
@@ -1009,15 +1017,17 @@
   </div>
 </div>
 
-<!-- ── Botão de Configurações ── -->
-<button class="settings-btn" id="settings-btn" onclick="toggleSettings()" title="Configurações">⚙️</button>
 
 <!-- ── Painel de Configurações ── -->
 <div class="settings-panel" id="settings-panel">
-  <div class="settings-header">
-    <span class="settings-header-title">⚙️ Configurações</span>
+  <div class="settings-header" style="padding:14px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--surface);position:sticky;top:0;z-index:1;">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <button class="btn btn-ghost btn-sm" onclick="toggleSettings()">← Voltar</button>
+      <span class="settings-header-title">⚙️ Configurações</span>
+    </div>
     <button class="btn btn-ghost btn-sm" onclick="toggleSettings()">✕</button>
   </div>
+  <div style="flex:1;overflow-y:auto;max-width:640px;width:100%;margin:0 auto;padding:8px 0 40px;">
 
   <!-- Perfil -->
   <div class="settings-section">
@@ -1131,6 +1141,7 @@
       </label>
     </div>
   </div>
+  </div><!-- fim do conteúdo scrollável -->
 </div>
 
 <!-- ── Modal de Perfil ── -->
