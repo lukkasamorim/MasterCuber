@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CubeTimer</title>
-  <script>
-  if (window.innerWidth <= 768) {
-    window.location.replace('mobile.html');
+ <script>
+  if (window.location.pathname !== '/MasterCuber/mobile.html' && window.innerWidth <= 768) {
+    window.location.replace('/MasterCuber/mobile.html');
   }
 </script>
   <script>
