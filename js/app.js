@@ -1,6 +1,6 @@
 //  STORAGE
 // ═══════════════════════════════════════════════
-const APP_VERSION = '0.5.8';
+const APP_VERSION = '1.7.0';
 const STORE_KEY   = 'cubetimer_v1';
 
 // ── Configurações (declarado cedo para evitar erros de hoisting) ──
@@ -17,6 +17,12 @@ const CFG_DEFAULTS = {
   theme        : 'green',
   onlineVisible: true,
   visibleStats : ['count','best','worst','mean','sigma','ao3','ao5','ao12','ao50','ao100'],
+  // Personalização avançada (null = usa padrão do tema)
+  customTimerColor   : null,
+  customScrambleColor: null,
+  customBgColor      : null,
+  customTextColor    : null,
+  customAccentColor  : null,
 };
 let cfg = (() => {
   try { return { ...CFG_DEFAULTS, ...JSON.parse(localStorage.getItem(CFG_KEY) || '{}') }; }
@@ -1679,11 +1685,18 @@ function showPage(page) {
   document.removeEventListener('keydown', battleKeyDown);
   document.removeEventListener('keyup',   battleKeyUp);
 
+  const ranked = document.getElementById('page-ranked');
+
   // Esconde tudo
   timer.style.display  = 'none';
   if (login) login.style.display = 'none';
   learn.style.display  = 'none';
   battle.style.display = 'none';
+  if (ranked) ranked.style.display = 'none';
+
+  // Para listeners ranked
+  document.removeEventListener('keydown', rankedKeyDown);
+  document.removeEventListener('keyup',   rankedKeyUp);
 
   if (page === 'timer') {
     timer.style.display = 'grid';
@@ -1706,6 +1719,14 @@ function showPage(page) {
     document.addEventListener('keydown', battleKeyDown);
     document.addEventListener('keyup',   battleKeyUp);
     showBattleLobby();
+
+  } else if (page === 'ranked') {
+    const ranked = document.getElementById('page-ranked');
+    if (ranked) {
+      ranked.style.display = 'flex';
+      showRankedLobby();
+    }
+    saveLastPage('ranked');
   }
 }
 
@@ -2359,14 +2380,21 @@ function battleKeyUp(e) {
 // ═══════════════════════════════════════════════
 
 const THEMES = {
-  green : '#d4f244',
-  blue  : '#7dd3fc',
-  purple: '#c084fc',
-  red   : '#f87171',
-  orange: '#fb923c',
-  teal  : '#34d399',
-  pink  : '#f472b6',
-  amber : '#fbbf24',
+  green  : { accent: '#d4f244', bg: '#0d0d0d', text: '#f0ede6', timer: '#f0ede6', scramble: '#f0ede6' },
+  blue   : { accent: '#7dd3fc', bg: '#0d0d0d', text: '#f0ede6', timer: '#f0ede6', scramble: '#f0ede6' },
+  purple : { accent: '#c084fc', bg: '#0d0d0d', text: '#f0ede6', timer: '#f0ede6', scramble: '#f0ede6' },
+  red    : { accent: '#f87171', bg: '#0d0d0d', text: '#f0ede6', timer: '#f0ede6', scramble: '#f0ede6' },
+  orange : { accent: '#fb923c', bg: '#0d0d0d', text: '#f0ede6', timer: '#f0ede6', scramble: '#f0ede6' },
+  teal   : { accent: '#34d399', bg: '#0d0d0d', text: '#f0ede6', timer: '#f0ede6', scramble: '#f0ede6' },
+  pink   : { accent: '#f472b6', bg: '#0d0d0d', text: '#f0ede6', timer: '#f0ede6', scramble: '#f0ede6' },
+  amber  : { accent: '#fbbf24', bg: '#0d0d0d', text: '#f0ede6', timer: '#f0ede6', scramble: '#f0ede6' },
+  white  : { accent: '#ffffff', bg: '#0d0d0d', text: '#f0ede6', timer: '#ffffff', scramble: '#cccccc' },
+  cyan   : { accent: '#22d3ee', bg: '#0d0d0d', text: '#f0ede6', timer: '#f0ede6', scramble: '#f0ede6' },
+  lime   : { accent: '#a3e635', bg: '#0d0d0d', text: '#f0ede6', timer: '#f0ede6', scramble: '#f0ede6' },
+  rose   : { accent: '#fb7185', bg: '#0d0d0d', text: '#f0ede6', timer: '#f0ede6', scramble: '#f0ede6' },
+  // Temas com fundo claro
+  light  : { accent: '#2563eb', bg: '#f8fafc', text: '#1e293b', timer: '#1e293b', scramble: '#334155', surface: '#ffffff', surface2: '#f1f5f9', border: '#e2e8f0', border2: '#cbd5e1', muted: '#94a3b8' },
+  paper  : { accent: '#b45309', bg: '#fdf6e3', text: '#3b2f1a', timer: '#3b2f1a', scramble: '#5a4a35', surface: '#faefd4', surface2: '#f0e6c8', border: '#e6d9b8', border2: '#d4c4a0', muted: '#9a8466' },
 };
 
 const ALL_STATS = [
@@ -2396,8 +2424,43 @@ function saveCfg() {
 
 function applyCfg() {
   // Tema de cor
-  document.documentElement.style.setProperty('--accent', THEMES[cfg.theme] || THEMES.green);
-  document.documentElement.style.setProperty('--accent2', THEMES[cfg.theme] || THEMES.green);
+  const t = THEMES[cfg.theme] || THEMES.green;
+
+  // Variáveis de cor padrão do tema (ou custom se definido)
+  const accent   = cfg.customAccentColor  || t.accent;
+  const bg       = cfg.customBgColor      || t.bg      || '#0d0d0d';
+  const text     = cfg.customTextColor    || t.text     || '#f0ede6';
+  const timer    = cfg.customTimerColor   || t.timer    || text;
+  const scramble = cfg.customScrambleColor|| t.scramble || text;
+
+  const r = document.documentElement;
+  r.style.setProperty('--accent',  accent);
+  r.style.setProperty('--accent2', accent);
+  r.style.setProperty('--bg',      bg);
+  r.style.setProperty('--text',    text);
+  r.style.setProperty('--timer-color',    timer);
+  r.style.setProperty('--scramble-color', scramble);
+
+  // Variáveis de superfície: temas claros definem as suas, dark usa padrão
+  if (t.surface)  r.style.setProperty('--surface',  t.surface);
+  else r.style.removeProperty('--surface');
+  if (t.surface2) r.style.setProperty('--surface2', t.surface2);
+  else r.style.removeProperty('--surface2');
+  if (t.border)   r.style.setProperty('--border',   t.border);
+  else r.style.removeProperty('--border');
+  if (t.border2)  r.style.setProperty('--border2',  t.border2);
+  else r.style.removeProperty('--border2');
+  if (t.muted)    r.style.setProperty('--muted',    t.muted);
+  else r.style.removeProperty('--muted');
+
+  // Sync pickers de cor customizada na UI
+  ['timer','scramble','bg','text','accent'].forEach(k => {
+    const el = document.getElementById('custom-' + k + '-color');
+    if (el) {
+      const val = cfg['custom' + k.charAt(0).toUpperCase() + k.slice(1) + 'Color'];
+      el.value = val || (k === 'timer' ? timer : k === 'scramble' ? scramble : k === 'bg' ? bg : k === 'text' ? text : accent);
+    }
+  });
 
   // Tamanho do timer
   const sizes = { small: 'clamp(40px,6vw,72px)', medium: 'clamp(56px,9vw,108px)', large: 'clamp(80px,13vw,148px)' };
@@ -2475,8 +2538,37 @@ function toggleStat(id) {
 
 function setTheme(theme) {
   cfg.theme = theme;
+  // Limpa customizações ao trocar de tema predefinido
+  cfg.customTimerColor    = null;
+  cfg.customScrambleColor = null;
+  cfg.customBgColor       = null;
+  cfg.customTextColor     = null;
+  cfg.customAccentColor   = null;
   localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
   applyCfg();
+}
+
+function setCustomColor(key, value) {
+  // key: 'timer' | 'scramble' | 'bg' | 'text' | 'accent'
+  const cfgKey = 'custom' + key.charAt(0).toUpperCase() + key.slice(1) + 'Color';
+  cfg[cfgKey] = value;
+  cfg.theme = 'custom';
+  localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
+  applyCfg();
+  // Marca todos os swatches como inativos ao usar custom
+  document.querySelectorAll('.theme-swatch').forEach(el => el.classList.remove('active'));
+}
+
+function resetCustomColors() {
+  cfg.customTimerColor    = null;
+  cfg.customScrambleColor = null;
+  cfg.customBgColor       = null;
+  cfg.customTextColor     = null;
+  cfg.customAccentColor   = null;
+  cfg.theme = 'green';
+  localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
+  applyCfg();
+  loadCfgUI();
 }
 
 function setTimerSize(size) {
@@ -2507,3 +2599,521 @@ initPresence();
 showPage(loadLastPage() || 'timer');
 loadCfgUI();
 
+
+// ═══════════════════════════════════════════════
+//  MODO RANKED
+// ═══════════════════════════════════════════════
+
+const RANKED_WIN_TROPHIES  =  7;
+const RANKED_LOSS_TROPHIES =  5;
+const RANKED_MAX_REMATCHES =  3;  // máx de MDs entre o mesmo par
+const RANKED_MATCH_ROUNDS  =  1;  // MD1
+
+let rankedMatch       = null;
+let rankedIsHost      = false;
+let rankedPollId      = null;
+let rankedSearchTimer = null;
+let rankedSearchSecs  = 0;
+let rankedTimerState  = 'idle';
+let rankedStart       = 0;
+let rankedRafId       = null;
+let rankedHoldTimer   = null;
+let rankedHoldReady   = false;
+let rMyWins = 0, rOppWins = 0;
+let rMyDone = false, rOppDone = false;
+let rMyTime = null;
+
+// ── REST helpers ranked ────────────────────────
+async function sbGetRankedMatch(id) {
+  const r = await sbGet('ranked_matches', `id=eq.${id}&limit=1`);
+  return Array.isArray(r) && r.length ? r[0] : null;
+}
+async function sbGetRankedResults(roomId, round) {
+  return await sbGet('ranked_results', `room_id=eq.${roomId}&round=eq.${round}`);
+}
+async function sbInsertRankedResult(roomId, playerId, round, timeMs) {
+  await fetch(`${SUPABASE_URL}/rest/v1/ranked_results`, {
+    method: 'POST',
+    headers: { ...sbHeaders, 'Prefer': 'resolution=merge-duplicates' },
+    body: JSON.stringify({ room_id: roomId, player_id: playerId, round, time_ms: timeMs })
+  });
+}
+async function sbGetMyRankedProfile() {
+  const r = await sbGet('ranked_profiles', `id=eq.${MY_ID}&limit=1`);
+  return Array.isArray(r) && r.length ? r[0] : null;
+}
+async function sbUpsertRankedProfile(trophies, wins, losses) {
+  await sbUpsert('ranked_profiles', {
+    id: MY_ID,
+    nickname: myProfile.nickname,
+    avatar: myProfile.avatar,
+    trophies,
+    total_wins: wins,
+    total_losses: losses,
+    updated_at: new Date().toISOString()
+  });
+}
+async function getMatchCountBetween(a, b) {
+  // par ordenado para garantir unicidade
+  const [pa, pb] = [a, b].sort();
+  const r = await sbGet('ranked_history', `player_a=eq.${pa}&player_b=eq.${pb}&limit=1`);
+  return Array.isArray(r) && r.length ? r[0].match_count : 0;
+}
+async function incrementMatchCount(a, b) {
+  const [pa, pb] = [a, b].sort();
+  const existing = await sbGet('ranked_history', `player_a=eq.${pa}&player_b=eq.${pb}&limit=1`);
+  if (Array.isArray(existing) && existing.length) {
+    await fetch(`${SUPABASE_URL}/rest/v1/ranked_history?player_a=eq.${pa}&player_b=eq.${pb}`, {
+      method: 'PATCH',
+      headers: sbHeaders,
+      body: JSON.stringify({ match_count: existing[0].match_count + 1, last_match: new Date().toISOString() })
+    });
+  } else {
+    await sbUpsert('ranked_history', { player_a: pa, player_b: pb, match_count: 1, last_match: new Date().toISOString() });
+  }
+}
+async function resetMatchCountBetween(a, b) {
+  const [pa, pb] = [a, b].sort();
+  await fetch(`${SUPABASE_URL}/rest/v1/ranked_history?player_a=eq.${pa}&player_b=eq.${pb}`, {
+    method: 'PATCH',
+    headers: sbHeaders,
+    body: JSON.stringify({ match_count: 0, last_match: new Date().toISOString() })
+  });
+}
+
+// ── Perfil e troféus ───────────────────────────
+let myRankedProfile = null;
+
+async function loadMyRankedProfile() {
+  let p = await sbGetMyRankedProfile();
+  if (!p) {
+    await sbUpsertRankedProfile(0, 0, 0);
+    p = { id: MY_ID, nickname: myProfile.nickname, avatar: myProfile.avatar, trophies: 0, total_wins: 0, total_losses: 0 };
+  }
+  myRankedProfile = p;
+  return p;
+}
+
+function updateRankedProfileUI(p) {
+  if (!p) return;
+  const avatar = p.avatar || myProfile.avatar;
+  const name   = p.nickname || myProfile.nickname;
+  const el = id => document.getElementById(id);
+  if (el('ranked-lobby-avatar'))   el('ranked-lobby-avatar').textContent   = avatar;
+  if (el('ranked-lobby-name'))     el('ranked-lobby-name').textContent     = name;
+  if (el('ranked-lobby-trophies')) el('ranked-lobby-trophies').textContent = p.trophies;
+  if (el('ranked-lobby-record'))   el('ranked-lobby-record').textContent   = `${p.total_wins}V · ${p.total_losses}D`;
+  if (el('ranked-my-trophies-header')) el('ranked-my-trophies-header').textContent = `🏆 ${p.trophies}`;
+}
+
+// ── Matchmaking ────────────────────────────────
+async function findRankedMatch() {
+  // Garante perfil carregado
+  if (!myRankedProfile) await loadMyRankedProfile();
+
+  // Mostra animação de busca
+  document.getElementById('ranked-search-area').style.display    = 'none';
+  document.getElementById('ranked-searching').style.display      = 'flex';
+  document.getElementById('ranked-tab-leaderboard').style.display = 'none';
+  document.getElementById('ranked-tab-history').style.display    = 'none';
+  document.querySelector('.ranked-tabs').style.display           = 'none';
+  document.getElementById('ranked-result').style.display         = 'none';
+  document.getElementById('ranked-lobby').style.display          = 'flex';
+  document.getElementById('ranked-arena').style.display          = 'none';
+
+  rankedSearchSecs = 0;
+  document.getElementById('ranked-search-time').textContent = '0s';
+  rankedSearchTimer = setInterval(() => {
+    rankedSearchSecs++;
+    document.getElementById('ranked-search-time').textContent = rankedSearchSecs + 's';
+  }, 1000);
+
+  // Entra na fila
+  await sbUpsert('ranked_queue', {
+    id: MY_ID,
+    nickname: myProfile.nickname,
+    avatar: myProfile.avatar,
+    trophies: myRankedProfile.trophies,
+    joined_at: new Date().toISOString()
+  });
+
+  // Poll matchmaking
+  rankedPollId = setInterval(pollRankedMatchmaking, 2500);
+}
+
+async function cancelRankedSearch() {
+  clearInterval(rankedPollId);
+  clearInterval(rankedSearchTimer);
+  await sbDelete('ranked_queue', `id=eq.${MY_ID}`);
+  showRankedLobby();
+}
+
+async function pollRankedMatchmaking() {
+  // Verifica se já foi colocado em uma partida (como guest)
+  const myMatch = await sbGet('ranked_matches', `guest_id=eq.${MY_ID}&status=eq.active&order=created_at.desc&limit=1`);
+  if (Array.isArray(myMatch) && myMatch.length) {
+    clearInterval(rankedPollId);
+    clearInterval(rankedSearchTimer);
+    rankedMatch   = myMatch[0];
+    rankedIsHost  = false;
+    rMyWins = 0; rOppWins = 0;
+    await sbDelete('ranked_queue', `id=eq.${MY_ID}`);
+    startRankedArena(rankedMatch.scramble, 1);
+    return;
+  }
+
+  // Tenta fazer o match como host
+  // Limpa fila velha (> 30s)
+  const cutoff = new Date(Date.now() - 30000).toISOString();
+  await sbDelete('ranked_queue', `joined_at=lt.${cutoff}`);
+
+  const queue = await sbGet('ranked_queue', `id=neq.${MY_ID}&order=joined_at.asc&limit=20`);
+  if (!Array.isArray(queue) || !queue.length) return;
+
+  // Filtra adversários que não atingiram o limite de rematches
+  for (const candidate of queue) {
+    const count = await getMatchCountBetween(MY_ID, candidate.id);
+    if (count >= RANKED_MAX_REMATCHES) continue;
+
+    // Encontrou adversário! Cria a partida
+    clearInterval(rankedPollId);
+    clearInterval(rankedSearchTimer);
+
+    const matchId  = genRoomCode();
+    const scramble = genScramble();
+
+    await sbUpsert('ranked_matches', {
+      id            : matchId,
+      scramble,
+      host_id       : MY_ID,
+      host_nickname : myProfile.nickname,
+      host_avatar   : myProfile.avatar,
+      guest_id      : candidate.id,
+      guest_nickname: candidate.nickname,
+      guest_avatar  : candidate.avatar,
+      status        : 'active',
+      round         : 1,
+      host_wins     : 0,
+      guest_wins    : 0,
+      created_at    : new Date().toISOString()
+    });
+
+    // Remove ambos da fila
+    await sbDelete('ranked_queue', `id=eq.${MY_ID}`);
+    await sbDelete('ranked_queue', `id=eq.${candidate.id}`);
+
+    rankedMatch   = { id: matchId, scramble, host_id: MY_ID, guest_id: candidate.id,
+                      host_nickname: myProfile.nickname, host_avatar: myProfile.avatar,
+                      guest_nickname: candidate.nickname, guest_avatar: candidate.avatar,
+                      status: 'active', round: 1, host_wins: 0, guest_wins: 0 };
+    rankedIsHost  = true;
+    rMyWins = 0; rOppWins = 0;
+    startRankedArena(scramble, 1);
+    return;
+  }
+}
+
+// ── Arena ranked ───────────────────────────────
+function startRankedArena(scramble, round) {
+  document.getElementById('ranked-lobby').style.display  = 'none';
+  document.getElementById('ranked-arena').style.display  = 'flex';
+  document.getElementById('ranked-result').style.display = 'none';
+
+  const isHost = rankedIsHost;
+  const opp    = isHost
+    ? { name: rankedMatch.guest_nickname, avatar: rankedMatch.guest_avatar }
+    : { name: rankedMatch.host_nickname,  avatar: rankedMatch.host_avatar  };
+
+  document.getElementById('ranked-round').textContent     = round;
+  document.getElementById('ranked-scramble').textContent  = scramble;
+  document.getElementById('rp-me-avatar').textContent     = myProfile.avatar;
+  document.getElementById('rp-me-name').textContent       = myProfile.nickname;
+  document.getElementById('rp-opp-avatar').textContent    = opp.avatar || '❓';
+  document.getElementById('rp-opp-name').textContent      = opp.name   || 'Adversário';
+  document.getElementById('rp-me-wins').textContent       = rMyWins  + ' vitória' + (rMyWins  !== 1 ? 's' : '');
+  document.getElementById('rp-opp-wins').textContent      = rOppWins + ' vitória' + (rOppWins !== 1 ? 's' : '');
+  document.getElementById('rp-me-score').textContent      = '—';
+  document.getElementById('rp-opp-score').textContent     = '—';
+  document.getElementById('ranked-status').textContent    = '';
+
+  const timerEl = document.getElementById('ranked-timer');
+  timerEl.textContent = '0.00';
+  timerEl.className   = 'timer-display idle';
+  document.getElementById('ranked-hint').innerHTML = 'segure <kbd>espaço</kbd> para iniciar';
+
+  rMyDone  = false;
+  rOppDone = false;
+  rMyTime  = null;
+  rankedTimerState = 'idle';
+
+  document.removeEventListener('keydown', rankedKeyDown);
+  document.removeEventListener('keyup',   rankedKeyUp);
+  document.addEventListener('keydown', rankedKeyDown);
+  document.addEventListener('keyup',   rankedKeyUp);
+
+  rankedPollId = setInterval(pollRankedRound, 2000);
+}
+
+async function pollRankedRound() {
+  if (!rankedMatch) return;
+  const room = await sbGetRankedMatch(rankedMatch.id);
+  if (!room) { leaveRanked(); return; }
+  rankedMatch = room;
+
+  const results = await sbGetRankedResults(rankedMatch.id, rankedMatch.round);
+  if (!Array.isArray(results)) return;
+
+  const myId   = MY_ID;
+  const oppId  = rankedIsHost ? rankedMatch.guest_id : rankedMatch.host_id;
+  const myRes  = results.find(r => r.player_id === myId);
+  const oppRes = results.find(r => r.player_id === oppId);
+
+  if (myRes) {
+    document.getElementById('rp-me-score').textContent  = fmtTime(myRes.time_ms);
+    document.getElementById('rp-me-score').className    = 'bp-score done';
+  }
+  if (oppRes) {
+    document.getElementById('rp-opp-score').textContent = fmtTime(oppRes.time_ms);
+    document.getElementById('rp-opp-score').className   = 'bp-score done';
+    rOppDone = true;
+  }
+
+  // Ambos terminaram: processa round
+  if (myRes && oppRes && !rOppDone) return;
+  if (myRes && oppRes) {
+    clearInterval(rankedPollId);
+    document.removeEventListener('keydown', rankedKeyDown);
+    document.removeEventListener('keyup',   rankedKeyUp);
+
+    const iWon = myRes.time_ms < oppRes.time_ms;
+    if (iWon) rMyWins++; else rOppWins++;
+
+    document.getElementById('rp-me-wins').textContent  = rMyWins  + ' vitória' + (rMyWins  !== 1 ? 's' : '');
+    document.getElementById('rp-opp-wins').textContent = rOppWins + ' vitória' + (rOppWins !== 1 ? 's' : '');
+
+    const statusEl = document.getElementById('ranked-status');
+    statusEl.textContent = iWon ? '🟢 Você venceu este round!' : '🔴 Adversário venceu este round.';
+
+    // MD1 → fim imediato
+    setTimeout(() => finishRankedMatch(iWon), 2000);
+  }
+}
+
+async function finishRankedMatch(iWon) {
+  clearInterval(rankedPollId);
+  document.removeEventListener('keydown', rankedKeyDown);
+  document.removeEventListener('keyup',   rankedKeyUp);
+
+  // Atualiza troféus
+  if (!myRankedProfile) await loadMyRankedProfile();
+  const delta   = iWon ? RANKED_WIN_TROPHIES : -RANKED_LOSS_TROPHIES;
+  const newTroph = Math.max(0, myRankedProfile.trophies + delta);
+  const newWins  = myRankedProfile.total_wins   + (iWon ? 1 : 0);
+  const newLoss  = myRankedProfile.total_losses + (iWon ? 0 : 1);
+
+  await sbUpsertRankedProfile(newTroph, newWins, newLoss);
+  myRankedProfile = { ...myRankedProfile, trophies: newTroph, total_wins: newWins, total_losses: newLoss };
+
+  // Incrementa histórico de confronto
+  const oppId = rankedIsHost ? rankedMatch.guest_id : rankedMatch.host_id;
+  const newCount = await getMatchCountBetween(MY_ID, oppId);
+  if (newCount + 1 >= RANKED_MAX_REMATCHES) {
+    // Reseta após atingir o limite
+    await resetMatchCountBetween(MY_ID, oppId);
+  } else {
+    await incrementMatchCount(MY_ID, oppId);
+  }
+
+  // Deleta partida
+  await sbDelete('ranked_matches', `id=eq.${rankedMatch.id}`);
+  rankedMatch = null;
+
+  // Mostra resultado
+  showRankedResult(iWon, delta, newTroph);
+  updateRankedProfileUI(myRankedProfile);
+}
+
+function showRankedResult(iWon, delta, totalTrophies) {
+  document.getElementById('ranked-arena').style.display  = 'none';
+  document.getElementById('ranked-lobby').style.display  = 'flex';
+  document.getElementById('ranked-result').style.display = 'flex';
+  document.getElementById('ranked-search-area').style.display    = 'none';
+  document.getElementById('ranked-searching').style.display      = 'none';
+  document.querySelector('.ranked-tabs').style.display           = 'none';
+
+  const resultEl = document.getElementById('ranked-result');
+  resultEl.className = 'battle-section ' + (iWon ? 'ranked-result-win' : 'ranked-result-loss');
+
+  document.getElementById('ranked-result-icon').textContent     = iWon ? '🏆' : '💔';
+  document.getElementById('ranked-result-title').textContent    = iWon ? 'Vitória!' : 'Derrota';
+  document.getElementById('ranked-result-sub').textContent      = iWon
+    ? 'Você foi mais rápido! Troféus ganhos:'
+    : 'O adversário foi mais rápido. Troféus perdidos:';
+  document.getElementById('ranked-result-trophies').textContent = (iWon ? '+' : '') + delta + ' 🏆';
+  document.getElementById('ranked-result-total').textContent    = `Total: ${totalTrophies} troféus`;
+}
+
+// ── Timer ranked ───────────────────────────────
+function rankedPressDown() {
+  if (rankedTimerState !== 'idle') return;
+  rankedHoldReady = false;
+  document.getElementById('ranked-timer').className = 'timer-display holding';
+  rankedHoldTimer = setTimeout(() => {
+    rankedHoldReady = true;
+    document.getElementById('ranked-timer').className = 'timer-display ready';
+  }, cfg.holdTime || 300);
+}
+
+function rankedPressUp() {
+  clearTimeout(rankedHoldTimer);
+  if (rankedTimerState === 'idle' && rankedHoldReady) {
+    rankedTimerState = 'running';
+    rankedStart = Date.now();
+    document.getElementById('ranked-hint').textContent = 'solte para parar';
+    const tick = () => {
+      if (rankedTimerState !== 'running') return;
+      document.getElementById('ranked-timer').textContent = fmtTime(Date.now() - rankedStart);
+      rankedRafId = requestAnimationFrame(tick);
+    };
+    rankedRafId = requestAnimationFrame(tick);
+  } else if (rankedTimerState === 'running') {
+    cancelAnimationFrame(rankedRafId);
+    const t = Date.now() - rankedStart;
+    rankedTimerState = 'done';
+    rMyDone  = true;
+    rMyTime  = t;
+    document.getElementById('ranked-timer').textContent = fmtTime(t);
+    document.getElementById('ranked-timer').className   = 'timer-display idle';
+    document.getElementById('ranked-hint').textContent  = 'aguardando adversário...';
+    document.getElementById('ranked-status').textContent = '✅ Tempo enviado. Aguardando adversário...';
+    sbInsertRankedResult(rankedMatch.id, MY_ID, rankedMatch.round || 1, t);
+    rOppDone = false; // reseta flag para o poll
+  } else {
+    document.getElementById('ranked-timer').className = 'timer-display idle';
+  }
+}
+
+function rankedKeyDown(e) {
+  if (e.code === 'Space' && !e.repeat) { e.preventDefault(); rankedPressDown(); }
+}
+function rankedKeyUp(e) {
+  if (e.code === 'Space') { e.preventDefault(); rankedPressUp(); }
+}
+
+// ── Toque mobile ranked ───────────────────────
+function rankedTouchStart(e) { e.preventDefault(); rankedPressDown(); }
+function rankedTouchEnd(e)   { e.preventDefault(); rankedPressUp(); }
+
+// ── Navegação ranked ───────────────────────────
+async function showRankedLobby() {
+  document.getElementById('ranked-lobby').style.display  = 'flex';
+  document.getElementById('ranked-arena').style.display  = 'none';
+  document.getElementById('ranked-result').style.display = 'none';
+  document.getElementById('ranked-search-area').style.display     = 'block';
+  document.getElementById('ranked-searching').style.display       = 'none';
+  document.querySelector('.ranked-tabs').style.display            = 'flex';
+  document.getElementById('ranked-tab-leaderboard').style.display = 'block';
+  document.getElementById('ranked-tab-history').style.display     = 'none';
+  document.querySelectorAll('.ranked-tab').forEach((t,i) => t.classList.toggle('active', i===0));
+
+  const p = await loadMyRankedProfile();
+  updateRankedProfileUI(p);
+  loadLeaderboard();
+}
+
+async function leaveRanked() {
+  clearInterval(rankedPollId);
+  clearInterval(rankedSearchTimer);
+  cancelAnimationFrame(rankedRafId);
+  document.removeEventListener('keydown', rankedKeyDown);
+  document.removeEventListener('keyup',   rankedKeyUp);
+  if (rankedMatch) {
+    await sbDelete('ranked_matches', `id=eq.${rankedMatch.id}`);
+    rankedMatch = null;
+  }
+  await sbDelete('ranked_queue', `id=eq.${MY_ID}`);
+  showPage('timer');
+}
+
+// ── Leaderboard global ─────────────────────────
+async function loadLeaderboard() {
+  const el = document.getElementById('ranked-leaderboard');
+  if (!el) return;
+  el.innerHTML = '<div class="ranked-loading">Carregando ranking...</div>';
+  const rows = await sbGet('ranked_profiles', 'order=trophies.desc&limit=50');
+  if (!Array.isArray(rows) || !rows.length) {
+    el.innerHTML = '<div class="ranked-loading">Nenhum jogador ranqueado ainda.</div>';
+    return;
+  }
+  el.innerHTML = rows.map((r, i) => {
+    const pos     = i + 1;
+    const isMe    = r.id === MY_ID;
+    const posClass = pos === 1 ? 'top1' : pos === 2 ? 'top2' : pos === 3 ? 'top3' : '';
+    const posLabel = pos === 1 ? '🥇' : pos === 2 ? '🥈' : pos === 3 ? '🥉' : `#${pos}`;
+    const total   = r.total_wins + r.total_losses;
+    const wr      = total > 0 ? Math.round(r.total_wins / total * 100) : 0;
+    return `<div class="ranked-lb-row ${isMe ? 'is-me' : ''}">
+      <div class="ranked-lb-pos ${posClass}">${posLabel}</div>
+      <div class="ranked-lb-player">
+        <span class="ranked-lb-avatar">${r.avatar || '🧊'}</span>
+        <div>
+          <div class="ranked-lb-name">${r.nickname || 'Cuber'}${isMe ? ' <span style="color:var(--accent);font-size:10px;">(você)</span>' : ''}</div>
+          <div class="ranked-lb-record">${r.total_wins}V · ${r.total_losses}D</div>
+        </div>
+      </div>
+      <div class="ranked-lb-wr">${wr}% WR</div>
+      <div class="ranked-lb-trophies">🏆 ${r.trophies}</div>
+    </div>`;
+  }).join('');
+}
+
+async function loadRankedHistory() {
+  const el = document.getElementById('ranked-history-list');
+  if (!el) return;
+  el.innerHTML = '<div class="ranked-loading">Carregando...</div>';
+  // Busca histórico de confrontos do jogador
+  const [asA, asB] = await Promise.all([
+    sbGet('ranked_history', `player_a=eq.${MY_ID}&order=last_match.desc&limit=20`),
+    sbGet('ranked_history', `player_b=eq.${MY_ID}&order=last_match.desc&limit=20`)
+  ]);
+  const all = [...(Array.isArray(asA) ? asA : []), ...(Array.isArray(asB) ? asB : [])]
+    .sort((a, b) => new Date(b.last_match) - new Date(a.last_match))
+    .slice(0, 20);
+
+  if (!all.length) {
+    el.innerHTML = '<div class="ranked-loading">Nenhum confronto registrado ainda.</div>';
+    return;
+  }
+
+  // Busca perfis dos adversários
+  const oppIds = [...new Set(all.map(r => r.player_a === MY_ID ? r.player_b : r.player_a))];
+  const profiles = await sbGet('ranked_profiles', `id=in.(${oppIds.join(',')})&limit=20`);
+  const profileMap = {};
+  if (Array.isArray(profiles)) profiles.forEach(p => profileMap[p.id] = p);
+
+  el.innerHTML = all.map(r => {
+    const oppId   = r.player_a === MY_ID ? r.player_b : r.player_a;
+    const opp     = profileMap[oppId] || { nickname: 'Cuber', avatar: '🧊' };
+    const date    = new Date(r.last_match).toLocaleDateString('pt-BR');
+    const remaining = RANKED_MAX_REMATCHES - r.match_count;
+    return `<div class="ranked-lb-row">
+      <div class="ranked-lb-avatar">${opp.avatar || '🧊'}</div>
+      <div class="ranked-lb-player" style="flex-direction:column;align-items:flex-start;gap:2px;">
+        <div class="ranked-lb-name">${opp.nickname || 'Cuber'}</div>
+        <div class="ranked-lb-record">${r.match_count} partida${r.match_count !== 1 ? 's' : ''} · ${date}</div>
+      </div>
+      <div class="ranked-lb-wr" style="font-size:10px;">${remaining > 0 ? remaining + ' restante' + (remaining !== 1 ? 's' : '') : 'resetado'}</div>
+      <div class="ranked-lb-trophies" style="font-size:12px;color:var(--muted);">🏆 ${opp.trophies ?? '—'}</div>
+    </div>`;
+  }).join('');
+}
+
+function switchRankedTab(tab) {
+  document.querySelectorAll('.ranked-tab').forEach((t, i) => {
+    t.classList.toggle('active', (i === 0 && tab === 'leaderboard') || (i === 1 && tab === 'history'));
+  });
+  document.getElementById('ranked-tab-leaderboard').style.display = tab === 'leaderboard' ? 'block' : 'none';
+  document.getElementById('ranked-tab-history').style.display     = tab === 'history'     ? 'block' : 'none';
+  if (tab === 'leaderboard') loadLeaderboard();
+  else loadRankedHistory();
+}
