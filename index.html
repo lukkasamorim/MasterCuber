@@ -4,11 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CubeTimer</title>
-<script>
-  if (window.innerWidth <= 768) {
-    window.location.replace('mobile.html');
-  }
-</script>
   <script>
     (function() {
       const params = new URLSearchParams(window.location.search);
@@ -26,7 +21,7 @@
 <header class="header">
   <div class="header-left">
     <span class="logo">CubeTimer</span>
-    <span class="vbadge">v0.5.9</span>
+    <span class="vbadge">v1.7.0</span>
   </div>
   <div class="header-right">
     <button class="btn btn-ghost btn-sm" id="btn-show-preview" onclick="toggleScramblePreview()" title="Mostrar prévia do scramble" style="display:none">⬛ Prévia</button>
@@ -227,7 +222,7 @@
 <div id="page-login" class="login-page" style="display:none">
   <div class="login-inner">
     <div class="login-hero">
-      <div class="login-hero-badge">v0.5.8</div>
+      <div class="login-hero-badge">v1.7.0</div>
       <div class="login-hero-icon">🧊</div>
       <div class="login-hero-title">CubeTimer</div>
       <div class="login-hero-sub">Escolha um modo para começar.</div>
@@ -262,6 +257,16 @@
         </div>
         <div class="mode-desc">Crie uma sala e dispute com um amigo em rounds.</div>
         <div class="mode-cta">Entrar na Batalha →</div>
+      </button>
+
+      <button class="mode-card mode-ranked" onclick="showPage('ranked')">
+        <div class="mode-top">
+          <div class="mode-icon">🏆</div>
+          <div class="mode-title">Ranked</div>
+          <div class="mode-pill mode-pill-ranked">competitivo</div>
+        </div>
+        <div class="mode-desc">Busque adversários e acumule troféus. Ranking global em tempo real.</div>
+        <div class="mode-cta">Jogar Ranked →</div>
       </button>
     </div>
 
@@ -347,6 +352,141 @@
       <!-- Status do round -->
       <div class="battle-status" id="battle-status"></div>
 
+    </div>
+  </div>
+</div>
+
+
+<!-- ── PÁGINA RANKED ── -->
+<div id="page-ranked" class="battle-page" style="display:none">
+  <div class="battle-topbar">
+    <button class="btn btn-ghost btn-sm" onclick="leaveRanked()">← Voltar</button>
+    <div class="battle-topbar-title">🏆 Modo Ranked</div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span class="ranked-trophy-badge" id="ranked-my-trophies-header">🏆 —</span>
+    </div>
+  </div>
+
+  <!-- Lobby ranked -->
+  <div id="ranked-lobby" class="battle-section">
+    <div class="ranked-lobby-inner">
+
+      <!-- Card do jogador -->
+      <div class="ranked-profile-card" id="ranked-profile-card">
+        <div class="ranked-profile-avatar" id="ranked-lobby-avatar">🧊</div>
+        <div class="ranked-profile-info">
+          <div class="ranked-profile-name" id="ranked-lobby-name">—</div>
+          <div class="ranked-trophy-row">
+            <span class="ranked-trophy-icon">🏆</span>
+            <span class="ranked-trophy-count" id="ranked-lobby-trophies">0</span>
+            <span class="ranked-trophy-label">troféus</span>
+          </div>
+          <div class="ranked-record" id="ranked-lobby-record">0V · 0D</div>
+        </div>
+      </div>
+
+      <!-- Botão buscar -->
+      <div id="ranked-search-area">
+        <button class="btn-complete ranked-search-btn" id="btn-find-match" onclick="findRankedMatch()">
+          🔍 Buscar Partida
+        </button>
+        <p class="ranked-search-sub">Você será pareado com um adversário de nível similar</p>
+      </div>
+
+      <!-- Buscando... -->
+      <div id="ranked-searching" style="display:none;flex-direction:column;align-items:center;gap:16px;">
+        <div class="ranked-searching-anim">
+          <div class="searching-ring"></div>
+          <div class="searching-icon">🔍</div>
+        </div>
+        <div class="ranked-searching-text">Procurando adversário...</div>
+        <div class="ranked-searching-sub" id="ranked-search-time">0s</div>
+        <button class="btn btn-ghost btn-sm btn-danger" onclick="cancelRankedSearch()">Cancelar busca</button>
+      </div>
+
+      <!-- Tabs: ranking global -->
+      <div class="ranked-tabs">
+        <button class="ranked-tab active" onclick="switchRankedTab('leaderboard')">🏆 Ranking Global</button>
+        <button class="ranked-tab" onclick="switchRankedTab('history')">📋 Meu Histórico</button>
+      </div>
+
+      <!-- Leaderboard -->
+      <div id="ranked-tab-leaderboard" class="ranked-tab-content">
+        <div class="ranked-leaderboard" id="ranked-leaderboard">
+          <div class="ranked-loading">Carregando ranking...</div>
+        </div>
+      </div>
+
+      <!-- Histórico pessoal -->
+      <div id="ranked-tab-history" class="ranked-tab-content" style="display:none">
+        <div class="ranked-leaderboard" id="ranked-history-list">
+          <div class="ranked-loading">Carregando histórico...</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Arena ranked (igual batalha mas com contexto ranked) -->
+  <div id="ranked-arena" class="battle-section" style="display:none">
+    <div class="battle-arena-inner">
+
+      <!-- Scramble -->
+      <div class="battle-scramble-card">
+        <span class="plabel">SCRAMBLE — ROUND <span id="ranked-round">1</span></span>
+        <div class="scramble-text" id="ranked-scramble" style="margin-top:8px"></div>
+      </div>
+
+      <!-- Placar com troféus em jogo -->
+      <div class="ranked-stakes-bar">
+        <span class="ranked-stakes-win">+7 🏆</span>
+        <span class="ranked-stakes-label">troféus em jogo</span>
+        <span class="ranked-stakes-loss">-5 🏆</span>
+      </div>
+
+      <!-- Scoreboard -->
+      <div class="battle-scoreboard">
+        <div class="battle-player-card" id="rp-me">
+          <div class="bp-avatar" id="rp-me-avatar">🧊</div>
+          <div class="bp-info">
+            <div class="bp-name" id="rp-me-name">Você</div>
+            <div class="bp-score" id="rp-me-score">—</div>
+          </div>
+          <div class="bp-wins" id="rp-me-wins">0 vitórias</div>
+        </div>
+        <div class="battle-vs">VS</div>
+        <div class="battle-player-card" id="rp-opp">
+          <div class="bp-avatar" id="rp-opp-avatar">❓</div>
+          <div class="bp-info">
+            <div class="bp-name" id="rp-opp-name">Adversário</div>
+            <div class="bp-score" id="rp-opp-score">—</div>
+          </div>
+          <div class="bp-wins" id="rp-opp-wins">0 vitórias</div>
+        </div>
+      </div>
+
+      <!-- Timer ranked -->
+      <div class="battle-timer-area">
+        <div class="timer-display idle" id="ranked-timer" ontouchstart="rankedTouchStart(event)" ontouchend="rankedTouchEnd(event)">0.00</div>
+        <div class="timer-hint" id="ranked-hint">segure <kbd>espaço</kbd> para iniciar</div>
+      </div>
+
+      <div class="battle-status" id="ranked-status"></div>
+    </div>
+  </div>
+
+  <!-- Resultado final da partida -->
+  <div id="ranked-result" class="battle-section" style="display:none">
+    <div class="ranked-result-inner">
+      <div class="ranked-result-icon" id="ranked-result-icon">🏆</div>
+      <div class="ranked-result-title" id="ranked-result-title">Vitória!</div>
+      <div class="ranked-result-sub" id="ranked-result-sub"></div>
+      <div class="ranked-result-trophies" id="ranked-result-trophies"></div>
+      <div class="ranked-result-total" id="ranked-result-total"></div>
+      <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;justify-content:center;">
+        <button class="btn-complete" onclick="findRankedMatch()">🔍 Buscar nova partida</button>
+        <button class="btn btn-ghost btn-sm" onclick="leaveRanked()">← Voltar ao lobby</button>
+      </div>
     </div>
   </div>
 </div>
@@ -455,7 +595,9 @@
         <button class="font-size-btn" onclick="setTimerSize('large')">G</button>
       </div>
     </div>
-    <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:8px">
+
+    <!-- Temas predefinidos -->
+    <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:10px;margin-top:4px">
       <div class="settings-label">Tema de cor</div>
       <div class="theme-grid">
         <div class="theme-swatch" style="background:#d4f244;color:#000" onclick="setTheme('green')">Verde</div>
@@ -466,7 +608,58 @@
         <div class="theme-swatch" style="background:#34d399;color:#000" onclick="setTheme('teal')">Teal</div>
         <div class="theme-swatch" style="background:#f472b6;color:#000" onclick="setTheme('pink')">Rosa</div>
         <div class="theme-swatch" style="background:#fbbf24;color:#000" onclick="setTheme('amber')">Âmbar</div>
+        <div class="theme-swatch" style="background:#ffffff;color:#000" onclick="setTheme('white')">Branco</div>
+        <div class="theme-swatch" style="background:#22d3ee;color:#000" onclick="setTheme('cyan')">Ciano</div>
+        <div class="theme-swatch" style="background:#a3e635;color:#000" onclick="setTheme('lime')">Lima</div>
+        <div class="theme-swatch" style="background:#fb7185;color:#000" onclick="setTheme('rose')">Rosa 2</div>
+        <div class="theme-swatch" style="background:#f8fafc;color:#1e293b;border:1px solid #cbd5e1" onclick="setTheme('light')">Claro</div>
+        <div class="theme-swatch" style="background:#fdf6e3;color:#3b2f1a;border:1px solid #d4c4a0" onclick="setTheme('paper')">Papel</div>
       </div>
+    </div>
+  </div>
+
+  <!-- Personalização avançada -->
+  <div class="settings-section">
+    <div class="settings-section-title" style="display:flex;align-items:center;justify-content:space-between;">
+      PERSONALIZAÇÃO AVANÇADA
+      <button class="btn btn-sm btn-ghost" onclick="resetCustomColors()" style="font-size:11px;padding:3px 8px">↺ Resetar</button>
+    </div>
+    <p style="font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.5;">Ajuste individualmente cada cor da interface. Ao editar, o tema ativo é substituído pela sua combinação personalizada.</p>
+
+    <div class="settings-row">
+      <div>
+        <div class="settings-label">Cor do timer</div>
+        <div class="settings-sublabel">número principal</div>
+      </div>
+      <input type="color" id="custom-timer-color" class="color-picker" oninput="setCustomColor('timer', this.value)">
+    </div>
+    <div class="settings-row">
+      <div>
+        <div class="settings-label">Cor do scramble</div>
+        <div class="settings-sublabel">texto de embaralhamento</div>
+      </div>
+      <input type="color" id="custom-scramble-color" class="color-picker" oninput="setCustomColor('scramble', this.value)">
+    </div>
+    <div class="settings-row">
+      <div>
+        <div class="settings-label">Cor de destaque</div>
+        <div class="settings-sublabel">accent, PB, rank, ready</div>
+      </div>
+      <input type="color" id="custom-accent-color" class="color-picker" oninput="setCustomColor('accent', this.value)">
+    </div>
+    <div class="settings-row">
+      <div>
+        <div class="settings-label">Cor do texto</div>
+        <div class="settings-sublabel">textos gerais da interface</div>
+      </div>
+      <input type="color" id="custom-text-color" class="color-picker" oninput="setCustomColor('text', this.value)">
+    </div>
+    <div class="settings-row">
+      <div>
+        <div class="settings-label">Cor de fundo</div>
+        <div class="settings-sublabel">fundo principal da tela</div>
+      </div>
+      <input type="color" id="custom-bg-color" class="color-picker" oninput="setCustomColor('bg', this.value)">
     </div>
   </div>
 
