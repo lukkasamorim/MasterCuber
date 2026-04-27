@@ -1,50 +1,41 @@
 // ═══════════════════════════════════════════════
 //  SMART CUBE BLUETOOTH — QiYi Tornado V3
-//  Web Bluetooth API + protocolo QiYi/GAN
+//  UUIDs confirmados via DevTools
 // ═══════════════════════════════════════════════
 
-// Estado da conexão
 let cubeDevice      = null;
 let cubeChar        = null;
 let cubeConnected   = false;
-let cubeMoveHistory = [];   // movimentos em tempo real
-let cubeState       = null; // estado atual das faces
+let cubeMoveHistory = [];
+let cubeLastBytes   = null;
 
-// ── Cores das faces (estado resolvido) ──
-// U=branco, D=amarelo, F=verde, B=azul, R=vermelho, L=laranja
-const SOLVED_STATE = [
-  0,0,0,0,0,0,0,0,0,  // U (branco=0)
-  1,1,1,1,1,1,1,1,1,  // R (vermelho=1)
-  2,2,2,2,2,2,2,2,2,  // F (verde=2)
-  3,3,3,3,3,3,3,3,3,  // D (amarelo=3)
-  4,4,4,4,4,4,4,4,4,  // L (laranja=4)
-  5,5,5,5,5,5,5,5,5,  // B (azul=5)
+// UUIDs confirmados do QY-QYSC-S-E580
+const CUBE_SERVICE = '0000fff0-0000-1000-8000-00805f9b34fb';
+const CUBE_CHARS   = [
+  '0000fff5-0000-1000-8000-00805f9b34fb',  // provavelmente notify
+  '0000fff6-0000-1000-8000-00805f9b34fb',
+  '0000fff7-0000-1000-8000-00805f9b34fb',
+  '0000fff4-0000-1000-8000-00805f9b34fb',
 ];
 
-// UUIDs do QiYi Tornado V3 (QY-QYSC)
-const QIYI_SERVICE_UUID  = '0000aadb-0000-1000-8000-00805f9b34fb';
-const QIYI_CHAR_UUID     = '0000aadc-0000-1000-8000-00805f9b34fb';
-
-// UUIDs alternativos para tentar em fallback
-const QIYI_SERVICE_ALT   = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
-const QIYI_CHAR_ALT_TX   = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
-
-// Mapa de bytes → movimentos legíveis
+// Mapa de movimentos QiYi
 const MOVE_MAP = {
-  0x00: "B",  0x01: "B'",
-  0x02: "F",  0x03: "F'",
-  0x04: "U",  0x05: "U'",
-  0x06: "D",  0x07: "D'",
-  0x08: "L",  0x09: "L'",
-  0x0A: "R",  0x0B: "R'",
+  0:  'U',  1:  "U'",
+  2:  'U2', 3:  'D',
+  4:  "D'", 5:  'D2',
+  6:  'R',  7:  "R'",
+  8:  'R2', 9:  'L',
+  10: "L'", 11: 'L2',
+  12: 'F',  13: "F'",
+  14: 'F2', 15: 'B',
+  16: "B'", 17: 'B2',
 };
 
-// ── UI helpers ──────────────────────────────
-function setCubeStatus(status, color) {
+// ── UI ──────────────────────────────────────
+function setCubeStatus(text, color) {
   const btn = document.getElementById('btn-cube-connect');
   const dot = document.getElementById('cube-bt-dot');
-  if (!btn) return;
-  btn.textContent = status;
+  if (btn) btn.textContent = text;
   if (dot) dot.style.background = color || 'var(--muted)';
 }
 
@@ -53,37 +44,36 @@ function updateMoveDisplay(move) {
   if (!el) return;
   el.textContent = move;
   el.style.opacity = '1';
-  setTimeout(() => { if (el) el.style.opacity = '0.3'; }, 400);
+  el.style.color   = 'var(--accent)';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.opacity = '0.3'; }, 500);
 }
 
 function updateMoveHistory() {
   const el = document.getElementById('cube-move-history');
-  if (!el) return;
-  el.textContent = cubeMoveHistory.slice(-8).join(' ');
+  if (el) el.textContent = cubeMoveHistory.slice(-10).join(' ');
 }
 
-// ── Verificação de cubo resolvido ────────────
-function isSolved(state) {
-  if (!state || state.length !== 54) return false;
-  for (let face = 0; face < 6; face++) {
-    const base = state[face * 9];
-    for (let i = 1; i < 9; i++) {
-      if (state[face * 9 + i] !== base) return false;
+// ── Parser de pacotes ────────────────────────
+function parsePacket(data) {
+  const b = new Uint8Array(data.buffer);
+  console.log('[BT] Pacote:', Array.from(b).map(x => x.toString(16).padStart(2,'0')).join(' '));
+
+  // Protocolo QiYi: cada byte de movimento está em posições específicas
+  // Tenta detectar movimento pelo padrão do pacote
+  if (b.length >= 2) {
+    // Tenta byte 0 como tipo e byte 1 como movimento
+    let moveCode = null;
+
+    if (b[0] === 0xfe || b[0] === 0x02) {
+      moveCode = b[1];
+    } else if (b.length >= 6) {
+      // Pacote de estado — pega últimos bytes
+      moveCode = b[b.length - 2];
+    } else {
+      moveCode = b[0];
     }
-  }
-  return true;
-}
 
-// ── Parser de pacote QiYi ────────────────────
-function parseQiYiPacket(data) {
-  const bytes = new Uint8Array(data.buffer);
-
-  // Tipo do pacote: 0x02 = movimento, 0x04 = estado completo
-  const type = bytes[0];
-
-  if (type === 0x02) {
-    // Pacote de movimento
-    const moveCode = bytes[1];
     const move = MOVE_MAP[moveCode];
     if (move) {
       cubeMoveHistory.push(move);
@@ -91,12 +81,10 @@ function parseQiYiPacket(data) {
       updateMoveDisplay(move);
       updateMoveHistory();
 
-      // Se timer está em inspeção e cubo foi mexido → inicia timer
+      // Timer automático
       if (timerState === STATE.INSPECTION) {
         startRunning();
-      }
-      // Se timer está idle e cubo foi mexido → inicia inspeção ou timer direto
-      if (timerState === STATE.IDLE) {
+      } else if (timerState === STATE.IDLE) {
         if (cfg?.inspection !== false) {
           startInspection();
         } else {
@@ -104,22 +92,25 @@ function parseQiYiPacket(data) {
         }
       }
     }
-  }
 
-  if (type === 0x04) {
-    // Pacote de estado completo das faces
-    if (bytes.length >= 55) {
-      cubeState = Array.from(bytes.slice(1, 55));
-
-      // Verifica se resolveu
-      if (timerState === STATE.RUNNING && isSolved(cubeState)) {
-        onCubeSolved();
-      }
+    // Verifica estado resolvido (54 bytes = estado completo)
+    if (b.length >= 54 && timerState === STATE.RUNNING) {
+      const faces = Array.from(b.slice(0, 54));
+      if (isSolved(faces)) onCubeSolved();
     }
   }
 }
 
-// ── Cubo resolvido! ──────────────────────────
+function isSolved(state) {
+  for (let f = 0; f < 6; f++) {
+    const base = state[f * 9];
+    for (let i = 1; i < 9; i++) {
+      if (state[f * 9 + i] !== base) return false;
+    }
+  }
+  return true;
+}
+
 function onCubeSolved() {
   cancelAnimationFrame(rafId);
   const t = Date.now() - startTime;
@@ -128,129 +119,125 @@ function onCubeSolved() {
   elTimer.textContent = fmtTime(t);
   setFocusMode(false);
   saveTime(t);
-
-  // Feedback visual e sonoro
-  playRankUpSound && playRankUpSound(false);
   showToast('🎉 Cubo resolvido! ' + fmtTime(t));
-
-  // Limpa histórico de movimentos
   cubeMoveHistory = [];
   updateMoveHistory();
 }
 
-// ── Conexão Bluetooth ────────────────────────
+// ── Conexão ──────────────────────────────────
 async function connectSmartCube() {
   if (!navigator.bluetooth) {
     showToast('Web Bluetooth não suportado. Use Chrome ou Edge.');
     return;
   }
-
-  if (cubeConnected) {
-    disconnectSmartCube();
-    return;
-  }
+  if (cubeConnected) { disconnectSmartCube(); return; }
 
   try {
     setCubeStatus('🔵 Conectando...', '#7dd3fc');
 
     cubeDevice = await navigator.bluetooth.requestDevice({
       acceptAllDevices: true,
-      optionalServices: [
-        QIYI_SERVICE_UUID,
-        QIYI_SERVICE_ALT,
-        '0000fff0-0000-1000-8000-00805f9b34fb',
-        '0000ffe0-0000-1000-8000-00805f9b34fb',
-      ],
+      optionalServices: [CUBE_SERVICE],
     });
 
     cubeDevice.addEventListener('gattserverdisconnected', onCubeDisconnected);
 
-    setCubeStatus('🔵 Conectando GATT...', '#7dd3fc');
-    const server = await cubeDevice.gatt.connect();
+    const server  = await cubeDevice.gatt.connect();
+    const service = await server.getPrimaryService(CUBE_SERVICE);
+    const chars   = await service.getCharacteristics();
 
-    // Descobre todos os serviços disponíveis
-    let services = [];
-    try { services = await server.getPrimaryServices(); } catch(e) {}
+    console.log('[BT] Characteristics disponíveis:');
+    chars.forEach(c => {
+      const props = Object.keys(c.properties).filter(k => c.properties[k]);
+      console.log(' ', c.uuid, props);
+    });
 
-    // Log para debug — aparece no console do browser
-    console.log('[CubeTimer BT] Serviços encontrados:', services.map(s => s.uuid));
-
-    // Tenta cada UUID de serviço conhecido
-    let service = null;
-    const serviceUUIDs = [QIYI_SERVICE_UUID, QIYI_SERVICE_ALT, '0000fff0-0000-1000-8000-00805f9b34fb', '0000ffe0-0000-1000-8000-00805f9b34fb'];
-
-    for (const uuid of serviceUUIDs) {
+    // Tenta cada characteristic para encontrar a que faz notify
+    let notifyChar = null;
+    for (const uuid of CUBE_CHARS) {
       try {
-        service = await server.getPrimaryService(uuid);
-        console.log('[CubeTimer BT] Serviço encontrado:', uuid);
-        break;
-      } catch(e) { /* tenta próximo */ }
-    }
-
-    if (!service) {
-      // Usa o primeiro serviço disponível como fallback
-      if (services.length > 0) {
-        service = services[0];
-        console.log('[CubeTimer BT] Usando primeiro serviço:', service.uuid);
-      } else {
-        throw new Error('Nenhum serviço GATT encontrado no cubo.');
-      }
-    }
-
-    // Descobre todas as characteristics do serviço
-    let chars = [];
-    try { chars = await service.getCharacteristics(); } catch(e) {}
-    console.log('[CubeTimer BT] Características:', chars.map(c => c.uuid + ' props:' + JSON.stringify(c.properties)));
-
-    // Tenta cada characteristic com notify
-    const charUUIDs = [QIYI_CHAR_UUID, QIYI_CHAR_ALT_TX, ...chars.filter(c => c.properties.notify).map(c => c.uuid)];
-
-    for (const uuid of [...new Set(charUUIDs)]) {
-      try {
-        cubeChar = await service.getCharacteristic(uuid);
-        if (cubeChar.properties.notify) {
-          await cubeChar.startNotifications();
-          cubeChar.addEventListener('characteristicvaluechanged', (e) => {
-            parseQiYiPacket(e.target.value);
-          });
-          console.log('[CubeTimer BT] Escutando characteristic:', uuid);
+        const ch = await service.getCharacteristic(uuid);
+        if (ch.properties.notify || ch.properties.indicate) {
+          notifyChar = ch;
+          console.log('[BT] Usando characteristic:', uuid);
           break;
         }
-      } catch(e) { cubeChar = null; }
+      } catch(e) {}
     }
 
-    if (!cubeChar) throw new Error('Nenhuma characteristic de notificação encontrada.');
+    // Fallback: usa qualquer char com notify
+    if (!notifyChar) {
+      notifyChar = chars.find(c => c.properties.notify || c.properties.indicate);
+    }
+
+    if (!notifyChar) {
+      // Tenta read em todas para ver qual responde
+      showToast('⚠️ Cubo conectado mas sem notify. Tentando read...');
+      notifyChar = chars[0];
+    }
+
+    cubeChar = notifyChar;
+
+    try {
+      await cubeChar.startNotifications();
+      cubeChar.addEventListener('characteristicvaluechanged', e => parsePacket(e.target.value));
+      console.log('[BT] Notificações ativas!');
+    } catch(e) {
+      console.warn('[BT] startNotifications falhou, tentando read:', e);
+      // Fallback: polling via read
+      startCubePolling(service, chars);
+    }
 
     cubeConnected = true;
-    setCubeStatus('🟢 ' + (cubeDevice.name || 'Cubo'), '#4adb8a');
-    showToast('✅ Smart cube conectado! Mova uma peça para testar.');
+    const name = cubeDevice.name || 'Cubo';
+    setCubeStatus('🟢 ' + name, '#4adb8a');
+    showToast('✅ ' + name + ' conectado! Mova uma peça.');
 
     const panel = document.getElementById('cube-panel');
     if (panel) panel.style.display = 'flex';
 
-  } catch (err) {
+  } catch(err) {
     cubeConnected = false;
-    console.error('[CubeTimer BT] Erro:', err);
-    if (err.name === 'NotFoundError') {
-      setCubeStatus('🔵 Conectar Cubo', null);
-    } else {
+    console.error('[BT] Erro:', err);
+    if (err.name !== 'NotFoundError') {
       setCubeStatus('❌ Erro', '#e8584a');
-      showToast('Erro BT: ' + err.message);
+      showToast('Erro: ' + err.message);
       setTimeout(() => setCubeStatus('🔵 Conectar Cubo', null), 4000);
+    } else {
+      setCubeStatus('🔵 Conectar Cubo', null);
     }
   }
 }
 
+// Polling como fallback se notify não funcionar
+let _pollInterval = null;
+async function startCubePolling(service, chars) {
+  console.log('[BT] Iniciando polling...');
+  _pollInterval = setInterval(async () => {
+    for (const ch of chars) {
+      try {
+        const val = await ch.readValue();
+        const bytes = new Uint8Array(val.buffer);
+        const hex = Array.from(bytes).map(x=>x.toString(16).padStart(2,'0')).join('');
+        if (hex !== cubeLastBytes) {
+          cubeLastBytes = hex;
+          parsePacket(val);
+        }
+      } catch(e) {}
+    }
+  }, 100);
+}
+
 function disconnectSmartCube() {
-  if (cubeDevice && cubeDevice.gatt.connected) {
-    cubeDevice.gatt.disconnect();
-  }
+  clearInterval(_pollInterval);
+  if (cubeDevice?.gatt?.connected) cubeDevice.gatt.disconnect();
   onCubeDisconnected();
 }
 
 function onCubeDisconnected() {
+  clearInterval(_pollInterval);
   cubeConnected = false;
-  cubeChar      = null;
+  cubeChar = null;
   setCubeStatus('🔵 Conectar Cubo', null);
   showToast('Cubo desconectado.');
   const panel = document.getElementById('cube-panel');
