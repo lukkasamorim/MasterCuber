@@ -256,6 +256,26 @@ async function connectSmartCube(){
   if(cubeConnected){ disconnectSmartCube(); return; }
 
   try {
+    // Pede o MAC ao usuário (igual ao cstimer)
+    let macInput = localStorage.getItem('ct_cube_mac') || '';
+    macInput = prompt(
+      'Digite o MAC address do seu cubo (ex: CC:A3:00:00:E5:80)\n\n' +
+      'Você pode encontrar em: chrome://bluetooth-internals/#devices\n' +
+      'Ou ative chrome://flags/#enable-experimental-web-platform-features',
+      macInput
+    );
+    if(!macInput) return;
+
+    // Valida e parseia o MAC
+    const macStr = macInput.trim().toUpperCase().replace(/-/g,':');
+    const macParts = macStr.split(':');
+    if(macParts.length !== 6){
+      showToast('MAC inválido. Use o formato CC:A3:00:00:E5:80');
+      return;
+    }
+    const macBytes = macParts.map(x => parseInt(x,16));
+    localStorage.setItem('ct_cube_mac', macStr);
+
     setCubeStatus('🔵 Conectando...','#7dd3fc');
 
     cubeDevice = await navigator.bluetooth.requestDevice({
@@ -272,11 +292,9 @@ async function connectSmartCube(){
     await cubeChar.startNotifications();
     cubeChar.addEventListener('characteristicvaluechanged', onCubeData);
 
-    // Pega MAC address do dispositivo para o App Hello
-    // No Web Bluetooth não temos acesso direto ao MAC, então usamos zeros
-    // O cubo aceita zeros no MAC na maioria dos casos
-    const macBytes = [0x00,0x00,0x00,0x00,0x00,0x00];
+    // Envia App Hello com o MAC real
     await sendAppHello(macBytes);
+    console.log('[BT] App Hello enviado com MAC:', macStr);
 
     cubeConnected = true;
     const name = cubeDevice.name || 'QiYi';
