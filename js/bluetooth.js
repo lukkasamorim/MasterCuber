@@ -21,9 +21,13 @@ const SOLVED_STATE = [
   5,5,5,5,5,5,5,5,5,  // B (azul=5)
 ];
 
-// UUIDs do QiYi Tornado V3 (protocolo GAN v2)
+// UUIDs do QiYi Tornado V3 (QY-QYSC)
 const QIYI_SERVICE_UUID  = '0000aadb-0000-1000-8000-00805f9b34fb';
 const QIYI_CHAR_UUID     = '0000aadc-0000-1000-8000-00805f9b34fb';
+
+// UUIDs alternativos para tentar em fallback
+const QIYI_SERVICE_ALT   = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+const QIYI_CHAR_ALT_TX   = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
 
 // Mapa de bytes → movimentos legíveis
 const MOVE_MAP = {
@@ -153,39 +157,86 @@ async function connectSmartCube() {
       acceptAllDevices: true,
       optionalServices: [
         QIYI_SERVICE_UUID,
-        '0000aaaa-0000-1000-8000-00805f9b34fb',
+        QIYI_SERVICE_ALT,
         '0000fff0-0000-1000-8000-00805f9b34fb',
-        '6e400001-b5a3-f393-e0a9-e50e24dcca9e',
+        '0000ffe0-0000-1000-8000-00805f9b34fb',
       ],
     });
 
     cubeDevice.addEventListener('gattserverdisconnected', onCubeDisconnected);
 
-    const server  = await cubeDevice.gatt.connect();
-    const service = await server.getPrimaryService(QIYI_SERVICE_UUID);
-    cubeChar      = await service.getCharacteristic(QIYI_CHAR_UUID);
+    setCubeStatus('🔵 Conectando GATT...', '#7dd3fc');
+    const server = await cubeDevice.gatt.connect();
 
-    await cubeChar.startNotifications();
-    cubeChar.addEventListener('characteristicvaluechanged', (e) => {
-      parseQiYiPacket(e.target.value);
-    });
+    // Descobre todos os serviços disponíveis
+    let services = [];
+    try { services = await server.getPrimaryServices(); } catch(e) {}
+
+    // Log para debug — aparece no console do browser
+    console.log('[CubeTimer BT] Serviços encontrados:', services.map(s => s.uuid));
+
+    // Tenta cada UUID de serviço conhecido
+    let service = null;
+    const serviceUUIDs = [QIYI_SERVICE_UUID, QIYI_SERVICE_ALT, '0000fff0-0000-1000-8000-00805f9b34fb', '0000ffe0-0000-1000-8000-00805f9b34fb'];
+
+    for (const uuid of serviceUUIDs) {
+      try {
+        service = await server.getPrimaryService(uuid);
+        console.log('[CubeTimer BT] Serviço encontrado:', uuid);
+        break;
+      } catch(e) { /* tenta próximo */ }
+    }
+
+    if (!service) {
+      // Usa o primeiro serviço disponível como fallback
+      if (services.length > 0) {
+        service = services[0];
+        console.log('[CubeTimer BT] Usando primeiro serviço:', service.uuid);
+      } else {
+        throw new Error('Nenhum serviço GATT encontrado no cubo.');
+      }
+    }
+
+    // Descobre todas as characteristics do serviço
+    let chars = [];
+    try { chars = await service.getCharacteristics(); } catch(e) {}
+    console.log('[CubeTimer BT] Características:', chars.map(c => c.uuid + ' props:' + JSON.stringify(c.properties)));
+
+    // Tenta cada characteristic com notify
+    const charUUIDs = [QIYI_CHAR_UUID, QIYI_CHAR_ALT_TX, ...chars.filter(c => c.properties.notify).map(c => c.uuid)];
+
+    for (const uuid of [...new Set(charUUIDs)]) {
+      try {
+        cubeChar = await service.getCharacteristic(uuid);
+        if (cubeChar.properties.notify) {
+          await cubeChar.startNotifications();
+          cubeChar.addEventListener('characteristicvaluechanged', (e) => {
+            parseQiYiPacket(e.target.value);
+          });
+          console.log('[CubeTimer BT] Escutando characteristic:', uuid);
+          break;
+        }
+      } catch(e) { cubeChar = null; }
+    }
+
+    if (!cubeChar) throw new Error('Nenhuma characteristic de notificação encontrada.');
 
     cubeConnected = true;
     setCubeStatus('🟢 ' + (cubeDevice.name || 'Cubo'), '#4adb8a');
-    showToast('✅ Smart cube conectado!');
+    showToast('✅ Smart cube conectado! Mova uma peça para testar.');
 
-    // Mostra painel de movimentos
     const panel = document.getElementById('cube-panel');
-    if (panel) panel.style.display = 'block';
+    if (panel) panel.style.display = 'flex';
 
   } catch (err) {
     cubeConnected = false;
+    console.error('[CubeTimer BT] Erro:', err);
     if (err.name === 'NotFoundError') {
       setCubeStatus('🔵 Conectar Cubo', null);
     } else {
       setCubeStatus('❌ Erro', '#e8584a');
-      showToast('Erro: ' + err.message);
-      setTimeout(() => setCubeStatus('🔵 Conectar Cubo', null), 3000);
+      showToast('Erro BT: ' + err.message);
+      setTimeout(() => setCubeStatus('🔵 Conectar Cubo', null), 4000);
     }
   }
 }
