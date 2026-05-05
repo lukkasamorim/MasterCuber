@@ -1,247 +1,177 @@
 // ═══════════════════════════════════════════════
-//  GAN TIMER — Web Serial API (Stackmat Protocol)
-//  Compatível com: GAN Timer (Gen 1, Gen 2, Gen 3)
-//  Protocolo: Stackmat S3/S4 (9600 baud, 8N1)
-//  Ref: https://github.com/jfly/stackmat
+//  GAN HALO TIMER — Web Bluetooth API
+//  Protocolo GAN BLE documentado por afedotov
+//  Ref: gist.github.com/afedotov/a025fa5796c9c727b04cf98b293a02f6
+//
+//  Serviço:    0000fff0-0000-1000-8000-00805f9b34fb
+//  Notify:     0000fff5-0000-1000-8000-00805f9b34fb (estados do timer)
+//  Read:       0000fff2-0000-1000-8000-00805f9b34fb (tempos armazenados)
 // ═══════════════════════════════════════════════
 
-let ganPort         = null;
-let ganReader       = null;
-let ganConnected    = false;
-let ganReadLoop     = null;
-let ganLastState    = null;   // último estado do timer
-let ganLastMs       = 0;      // último tempo registrado
-let ganWasRunning   = false;  // estava rodando no tick anterior
-let ganSaveOnStop   = true;   // salva automaticamente quando para
+const GAN_SERVICE  = '0000fff0-0000-1000-8000-00805f9b34fb';
+const GAN_NOTIFY   = '0000fff5-0000-1000-8000-00805f9b34fb';
+const GAN_READ     = '0000fff2-0000-1000-8000-00805f9b34fb';
 
-// ── Protocolo Stackmat ─────────────────────────
-// Pacote de 9 bytes:
-// [status, d1, d2, d3, d4, d5, d6, checksum, CR/LF]
-//
-// status byte:
-//   'I' = parado em 0 (idle reset)
-//   'S' = parado com tempo (stopped)
-//   'R' = rodando (running)
-//   'L' = mão esquerda no pad
-//   'C' = mão direita no pad (contact)
-//   'A' = ambas as mãos
-//   ' ' = nenhuma mão (estado geral parado)
-//
-// d1..d6 = dígitos ASCII do tempo (MM:SS.cc)
-// checksum = 64 + soma dos dígitos
+// Estados do timer
+const GAN_STATE = {
+  GET_SET  : 0x01,
+  HANDS_OFF: 0x02,
+  RUNNING  : 0x03,
+  STOPPED  : 0x04,
+  IDLE     : 0x05,
+  HANDS_ON : 0x06,
+  FINISHED : 0x07,
+};
 
-const STACKMAT_BAUD = 9600;
-const STACKMAT_RUNNING_STATES = new Set(['R']);
-const STACKMAT_STOPPED_STATES = new Set(['S', ' ', 'I']);
-const STACKMAT_HANDS_STATES   = new Set(['L', 'C', 'A']);
+let ganDevice      = null;
+let ganChar        = null;
+let ganConnected   = false;
+let ganLastStateId = null;
 
-let stackmatBuffer = [];
-
-function parseStackmatPacket(buf) {
-  // Precisa de pelo menos 9 bytes
-  if (buf.length < 9) return null;
-
-  // Procura por um pacote válido no buffer
-  for (let i = 0; i <= buf.length - 9; i++) {
-    const status = String.fromCharCode(buf[i]);
-    const validStatus = 'ISRLCAi ';
-    if (!validStatus.includes(status)) continue;
-
-    // Dígitos devem ser ASCII 0-9
-    const digits = buf.slice(i + 1, i + 7);
-    if (!digits.every(b => b >= 48 && b <= 57)) continue;
-
-    // Verifica checksum: 64 + soma dos dígitos
-    const expectedCheck = 64 + digits.reduce((a, b) => a + b, 0);
-    const actualCheck   = buf[i + 7];
-    if (actualCheck !== (expectedCheck & 0xFF)) continue;
-
-    // Pacote válido!
-    const [d1, d2, d3, d4, d5, d6] = digits.map(b => b - 48);
-    // Formato: d1 = minutos, d2d3 = segundos, d4d5d6 = milissegundos
-    const minutes = d1;
-    const seconds = d2 * 10 + d3;
-    const ms      = (d4 * 100 + d5 * 10 + d6) * 10; // centésimos → ms
-
-    const totalMs = (minutes * 60 + seconds) * 1000 + ms;
-
-    return {
-      status,
-      totalMs,
-      running : STACKMAT_RUNNING_STATES.has(status),
-      stopped : STACKMAT_STOPPED_STATES.has(status),
-      hands   : STACKMAT_HANDS_STATES.has(status),
-      raw     : buf.slice(i, i + 9),
-    };
+// ── CRC-16/CCITT-FALSE ──────────────────────────
+// Polinômio 0x1021, valor inicial 0xFFFF
+function crc16ccitt(data) {
+  let crc = 0xFFFF;
+  for (const byte of data) {
+    crc ^= byte << 8;
+    for (let i = 0; i < 8; i++) {
+      crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) : (crc << 1);
+      crc &= 0xFFFF;
+    }
   }
-  return null;
+  return crc;
 }
 
-function processGanTimerData(bytes) {
-  // Acumula bytes no buffer
-  stackmatBuffer.push(...bytes);
+// ── Parser do pacote ─────────────────────────────
+// Formato: FE [len] [01] [state] [time?...] [crc_hi] [crc_lo]
+function parseGanPacket(data) {
+  const b = new Uint8Array(data.buffer || data);
+  if (b.length < 4) return null;
+  if (b[0] !== 0xFE) return null;
 
-  // Tenta extrair pacotes (cada um tem 9 bytes terminados em 0x0A ou 0x0D)
-  // GAN timer envia ~10 pacotes/segundo
-  while (stackmatBuffer.length >= 9) {
-    const packet = parseStackmatPacket(stackmatBuffer);
-    if (packet) {
-      handleStackmatPacket(packet);
-      // Remove até o final do pacote processado
-      const idx = stackmatBuffer.findIndex((b, i) => {
-        const s = String.fromCharCode(b);
-        return 'ISRLCAi '.includes(s) && stackmatBuffer.slice(i + 1, i + 7).every(x => x >= 48 && x <= 57);
-      });
-      if (idx >= 0) {
-        stackmatBuffer.splice(0, idx + 9);
-      } else {
-        stackmatBuffer.splice(0, 9);
+  const dataLen  = b[1];         // comprimento dos bytes de dados
+  const dataBytes = b.slice(2, 2 + dataLen - 2); // dados sem CRC
+  const crcBytes  = b.slice(2 + dataLen - 2, 2 + dataLen);
+
+  // Verifica CRC
+  const expectedCrc = crc16ccitt(dataBytes);
+  const actualCrc   = (crcBytes[0] << 8) | crcBytes[1];
+  if (expectedCrc !== actualCrc) {
+    console.warn('[GAN] CRC inválido — esperado:', expectedCrc.toString(16), 'recebido:', actualCrc.toString(16));
+    // Continua mesmo assim — alguns firmwares têm quirks
+  }
+
+  if (dataBytes[0] !== 0x01) return null; // prefixo de dados esperado
+
+  const state = dataBytes[1];
+
+  // Tempo presente apenas nos estados STOPPED (0x04) e IDLE (0x05)
+  let timeMs = null;
+  if ((state === GAN_STATE.STOPPED || state === GAN_STATE.IDLE) && dataBytes.length >= 6) {
+    const minutes = dataBytes[2];
+    const seconds = dataBytes[3];
+    const ms      = dataBytes[4] | (dataBytes[5] << 8); // uint16le
+    timeMs = (minutes * 60 + seconds) * 1000 + ms;
+  }
+
+  return { state, timeMs };
+}
+
+// ── Handler de eventos ───────────────────────────
+function onGanTimerEvent(event) {
+  const packet = parseGanPacket(event.target.value);
+  if (!packet) return;
+
+  const { state, timeMs } = packet;
+  const stateName = Object.keys(GAN_STATE).find(k => GAN_STATE[k] === state) || '?';
+  console.log(`[GAN] Estado: ${stateName}${timeMs != null ? ' | Tempo: ' + appFmt(timeMs) : ''}`);
+
+  updateGanPanelState(stateName);
+
+  switch (state) {
+    case GAN_STATE.HANDS_ON:
+      // Mãos no pad — prepara o timer visual
+      updateGanPanelTime(0);
+      updateGanPanelState('Pronto...');
+      break;
+
+    case GAN_STATE.HANDS_OFF:
+      updateGanPanelState('Aguardando...');
+      break;
+
+    case GAN_STATE.GET_SET:
+      updateGanPanelState('Preparar!');
+      break;
+
+    case GAN_STATE.RUNNING:
+      // Timer físico iniciou — reseta o display mas não controla o timer do app
+      // O tempo real vem do STOPPED
+      updateGanPanelState('Rodando...');
+      break;
+
+    case GAN_STATE.STOPPED:
+      if (timeMs != null && timeMs > 0) {
+        updateGanPanelTime(timeMs);
+        updateGanPanelState('✅ Salvo!');
+        onGanTimerStopped(timeMs);
       }
-    } else {
-      // Remove byte inválido e tenta de novo
-      stackmatBuffer.shift();
-    }
+      break;
+
+    case GAN_STATE.FINISHED:
+      // Estado automático após STOPPED — ignora
+      break;
+
+    case GAN_STATE.IDLE:
+      updateGanPanelState('Aguardando...');
+      updateGanPanelTime(0);
+      break;
   }
 
-  // Evita buffer crescer indefinidamente
-  if (stackmatBuffer.length > 100) stackmatBuffer.splice(0, stackmatBuffer.length - 50);
+  ganLastStateId = state;
 }
 
-// ── Helpers para acessar o app.js com segurança ─
-function appEl()       { return window.elTimer; }
-function appState()    { return window.timerState; }
-function appSTATE()    { return window.STATE; }
-function appFmt(ms)    { return window.fmtTime ? window.fmtTime(ms) : ms.toString(); }
-function appSave(t)    { if (window.saveTime) window.saveTime(t); }
-function appDelta(t)   { if (window.showTimerWithDelta) window.showTimerWithDelta(t); }
-function appFocus(on)  { if (window.setFocusMode) window.setFocusMode(on); }
-function appToast(msg) { if (window.showToast) window.showToast(msg); }
-function appScramble() { if (window.newScramble) window.newScramble(); }
-
-function handleStackmatPacket(packet) {
-  const { status, totalMs, running, stopped, hands } = packet;
-  const STATE = appSTATE();
-
-  // Atualiza display do painel lateral
-  updateGanTimerDisplay(totalMs, status);
-
-  // ── Transição RODANDO → PARADO: solve finalizada ──
-  if (ganWasRunning && stopped && totalMs > 0) {
-    ganWasRunning = false;
-    ganLastMs = totalMs;
-    onGanTimerStopped(totalMs);
-    ganLastState = packet;
-    return;
+function onGanTimerStopped(timeMs) {
+  // Mostra o tempo no display principal com delta
+  if (window.showTimerWithDelta) {
+    window.showTimerWithDelta(timeMs);
+  } else if (window.elTimer) {
+    window.elTimer.textContent = appFmt(timeMs);
   }
 
-  // ── Timer iniciou no físico ──
-  if (running && !ganWasRunning) {
-    ganWasRunning = true;
-    ganLastMs = totalMs;
-    // Cancela qualquer interação manual no app
-    if (STATE && appState() !== STATE.IDLE) {
-      // já está rodando via teclado, ignora
-    } else {
-      updateGanTimerState('rodando...');
-      startGanTimerSync();
-    }
-  } else if (running) {
-    ganLastMs = totalMs;
-  }
+  if (window.setFocusMode) window.setFocusMode(false);
 
-  // ── Mãos no pad → pronto para iniciar ──
-  if (hands) {
-    ganWasRunning = false;
-    updateGanTimerState('pronto...');
-    // Limpa o timer visual para 0
-    const el = appEl();
-    if (el && STATE && appState() === STATE.IDLE) {
-      el.textContent = '0.00';
-      el.className   = 'timer-display idle';
-      el.style.color = '';
-    }
+  // Salva o tempo no histórico
+  if (window.saveTime) {
+    window.saveTime(timeMs);
   }
-
-  // ── Timer resetado (status I) ──
-  if (status === 'I' || (stopped && totalMs === 0)) {
-    ganWasRunning = false;
-    updateGanTimerState('aguardando...');
-    const el = appEl();
-    if (el && STATE && appState() === STATE.IDLE) {
-      el.textContent = '0.00';
-      el.className   = 'timer-display idle';
-      el.style.color = '';
-    }
-  }
-
-  ganLastState = packet;
 }
 
-// ── Sincronização com o timer do app ──────────
-let ganSyncRaf = null;
-
-function startGanTimerSync() {
-  if (ganSyncRaf) return;   // já está sincronizando
-
-  const tick = () => {
-    if (!ganConnected || !ganWasRunning) {
-      ganSyncRaf = null;
-      return;
-    }
-    const el = appEl();
-    if (el) {
-      el.textContent = appFmt(ganLastMs);
-      el.className   = 'timer-display running';
-      el.style.color = '';
-    }
-    ganSyncRaf = requestAnimationFrame(tick);
-  };
-  ganSyncRaf = requestAnimationFrame(tick);
-}
-
-function onGanTimerStopped(totalMs) {
-  cancelAnimationFrame(ganSyncRaf);
-  ganSyncRaf = null;
-
-  // Mostra o tempo final com delta no timer do app
-  const el = appEl();
-  if (el) {
-    appDelta(totalMs);           // showTimerWithDelta
-    el.className   = 'timer-display idle';
-    el.style.color = '';
-  }
-
-  appFocus(false);               // setFocusMode(false)
-
-  // Salva no histórico e gera novo scramble
-  if (ganSaveOnStop && totalMs > 0) {
-    appSave(totalMs);            // saveTime (já mostra toast e gera scramble)
-  }
-
-  updateGanTimerState('✅ tempo salvo');
-}
-
-// ── UI do painel ───────────────────────────────
-function updateGanTimerDisplay(ms, status) {
+// ── UI do painel ─────────────────────────────────
+function updateGanPanelTime(ms) {
   const el = document.getElementById('gan-timer-display');
   if (el) el.textContent = ms > 0 ? appFmt(ms) : '0.00';
 }
 
-function updateGanTimerState(text) {
+function updateGanPanelState(text) {
   const el = document.getElementById('gan-timer-state');
   if (el) el.textContent = text;
 }
 
-function setGanStatus(text, color) {
-  const dot   = document.getElementById('gantimer-status-dot');
-  const label = document.getElementById('btn-device-label');
-  if (dot) dot.style.background = color || 'var(--muted)';
+function setGanDot(color) {
+  const dot  = document.getElementById('gantimer-status-dot');
+  const dot2 = document.getElementById('gan-timer-dot-panel');
+  if (dot)  dot.style.background  = color;
+  if (dot2) dot2.style.background = color;
 }
 
-// ── Conexão via Web Serial ─────────────────────
+// ── Helpers seguros para acessar o app.js ────────
+function appFmt(ms)   { return window.fmtTime   ? window.fmtTime(ms)   : (ms / 1000).toFixed(2); }
+function appToast(msg){ if (window.showToast)    window.showToast(msg); }
+
+// ── Conexão Bluetooth ────────────────────────────
 async function connectGanTimer() {
-  if (!('serial' in navigator)) {
-    showToast('Web Serial não suportado. Use Chrome 89+ no desktop.');
+  if (!navigator.bluetooth) {
+    appToast('Web Bluetooth não suportado. Use Chrome ou Edge.');
     return;
   }
 
@@ -251,110 +181,79 @@ async function connectGanTimer() {
   }
 
   try {
-    setGanStatus('Conectando...', '#7dd3fc');
+    setGanDot('#7dd3fc');
+    updateDeviceButtonLabel?.();
 
-    // Solicita porta serial ao usuário
-    // GAN Timer aparece como CP210x ou CH340 USB-Serial
-    ganPort = await navigator.serial.requestPort({
+    ganDevice = await navigator.bluetooth.requestDevice({
       filters: [
-        { usbVendorId: 0x10C4 }, // Silicon Labs CP210x (GAN Gen1/Gen2)
-        { usbVendorId: 0x1A86 }, // CH340 (GAN Gen3 e clones)
-        { usbVendorId: 0x0403 }, // FTDI (alguns modelos)
-      ]
+        { namePrefix: 'GAN' },
+        { namePrefix: 'Halo' },
+        { namePrefix: 'GAN-TIMER' },
+        { namePrefix: 'GAN_TIMER' },
+      ],
+      optionalServices: [GAN_SERVICE],
     });
 
-    await ganPort.open({
-      baudRate: STACKMAT_BAUD,
-      dataBits: 8,
-      stopBits: 1,
-      parity  : 'none',
-      flowControl: 'none',
-    });
+    ganDevice.addEventListener('gattserverdisconnected', onGanDisconnected);
+
+    const server  = await ganDevice.gatt.connect();
+    const service = await server.getPrimaryService(GAN_SERVICE);
+    ganChar       = await service.getCharacteristic(GAN_NOTIFY);
+
+    await ganChar.startNotifications();
+    ganChar.addEventListener('characteristicvaluechanged', onGanTimerEvent);
 
     ganConnected = true;
-    stackmatBuffer = [];
-    ganWasRunning  = false;
-    ganLastState   = null;
-
-    setGanStatus('🟢', '#4adb8a');
-    updateDeviceButtonLabel();
-    showToast('✅ GAN Timer conectado!');
+    const name = ganDevice.name || 'GAN Timer';
+    setGanDot('#4adb8a');
+    appToast('✅ ' + name + ' conectado!');
+    console.log('[GAN] Conectado:', name);
 
     // Mostra painel
     const panel = document.getElementById('gan-timer-panel');
     if (panel) panel.style.display = 'flex';
 
-    // Atualiza botão desconectar
-    updateDisconnectBtn();
+    updateDeviceButtonLabel?.();
+    updateDisconnectBtn?.();
 
-    // Loop de leitura
-    ganReader = ganPort.readable.getReader();
-    ganReadLoop = readGanTimerLoop();
-
-  } catch (err) {
+  } catch(err) {
     ganConnected = false;
-    setGanStatus('', 'var(--muted)');
+    setGanDot('var(--muted)');
+    console.error('[GAN] Erro:', err);
     if (err.name !== 'NotFoundError') {
-      showToast('Erro ao conectar: ' + err.message);
-      console.error('[GAN]', err);
+      appToast('Erro ao conectar GAN Timer: ' + err.message);
     }
+    updateDeviceButtonLabel?.();
   }
 }
 
-async function readGanTimerLoop() {
-  try {
-    while (ganConnected) {
-      const { value, done } = await ganReader.read();
-      if (done) break;
-      if (value) processGanTimerData(Array.from(value));
-    }
-  } catch (err) {
-    if (ganConnected) {
-      console.error('[GAN] Erro de leitura:', err);
-      showToast('GAN Timer desconectado inesperadamente.');
-      onGanTimerDisconnected();
-    }
-  } finally {
-    try { ganReader.releaseLock(); } catch(e) {}
+function disconnectGanTimer() {
+  if (ganDevice?.gatt?.connected) {
+    ganDevice.gatt.disconnect();
   }
+  onGanDisconnected();
 }
 
-async function disconnectGanTimer() {
+function onGanDisconnected() {
   ganConnected = false;
-  cancelAnimationFrame(ganSyncRaf);
-  ganSyncRaf = null;
+  ganChar      = null;
+  setGanDot('var(--muted)');
+  appToast('GAN Timer desconectado.');
+  console.log('[GAN] Desconectado.');
 
-  try {
-    if (ganReader) { await ganReader.cancel(); ganReader = null; }
-  } catch(e) {}
-
-  try {
-    if (ganPort) { await ganPort.close(); ganPort = null; }
-  } catch(e) {}
-
-  onGanTimerDisconnected();
-}
-
-function onGanTimerDisconnected() {
-  ganConnected = false;
-  setGanStatus('', 'var(--muted)');
-  updateDeviceButtonLabel();
-  updateDisconnectBtn();
-  showToast('GAN Timer desconectado.');
   const panel = document.getElementById('gan-timer-panel');
   if (panel) panel.style.display = 'none';
-  stackmatBuffer = [];
+
+  updateDeviceButtonLabel?.();
+  updateDisconnectBtn?.();
 }
 
-// ── Integração com bluetooth.js ────────────────
-// Sincroniza o dot do smart cube no submenu a cada segundo
+// ── Sync do status dot no submenu ────────────────
 window.addEventListener('load', () => {
   setInterval(() => {
-    const smartDot = document.getElementById('smartcube-status-dot');
-    if (smartDot && typeof cubeConnected !== 'undefined') {
-      smartDot.style.background = cubeConnected ? '#4adb8a' : 'var(--muted)';
-    }
-    if (typeof updateDeviceButtonLabel !== 'undefined') updateDeviceButtonLabel();
-    if (typeof updateDisconnectBtn     !== 'undefined') updateDisconnectBtn();
+    const dot = document.getElementById('gantimer-status-dot');
+    if (dot) dot.style.background = ganConnected ? '#4adb8a' : 'var(--muted)';
+    updateDeviceButtonLabel?.();
+    updateDisconnectBtn?.();
   }, 1000);
 });
