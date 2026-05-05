@@ -186,10 +186,10 @@ async function connectGanTimer() {
 
     ganDevice = await navigator.bluetooth.requestDevice({
       filters: [
-        { namePrefix: 'GAN' },
+        { namePrefix: 'GAN-ST' },   // GAN Smart Timer (ex: GAN-STv4357)
+        { namePrefix: 'GAN-' },
+        { namePrefix: 'GAN_' },
         { namePrefix: 'Halo' },
-        { namePrefix: 'GAN-TIMER' },
-        { namePrefix: 'GAN_TIMER' },
       ],
       optionalServices: [GAN_SERVICE],
     });
