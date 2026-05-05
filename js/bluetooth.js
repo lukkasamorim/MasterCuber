@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════
-//  SMART CUBE BLUETOOTH — QiYi Tornado V3
+//  SMART CUBE BLUETOOTH — QiYi Tornado V4
 //  Protocolo baseado no cstimer (parseQYData)
 //  Ref: github.com/cs-bin/cstimer
 // ═══════════════════════════════════════════════
@@ -378,7 +378,7 @@ function onCubeSolved(){
   const t = Date.now() - startTime;
   setTimerState(STATE.IDLE);
   setHint('idle');
-  elTimer.textContent = fmtTime(t);
+  showTimerWithDelta(t);
   setFocusMode(false);
   saveTime(t);
   showToast('🎉 ' + fmtTime(t));
@@ -465,7 +465,12 @@ async function connectSmartCube(){
     cubeConnected = true;
     const name = cubeDevice.name || 'QiYi';
     setCubeStatus('🟢 ' + name, '#4adb8a');
+    // Atualiza dot do submenu
+    const sDot = document.getElementById('smartcube-status-dot');
+    if(sDot) sDot.style.background = '#4adb8a';
     showToast('✅ ' + name + ' conectado!');
+    if(typeof updateDeviceButtonLabel !== 'undefined') updateDeviceButtonLabel();
+    if(typeof updateDisconnectBtn    !== 'undefined') updateDisconnectBtn();
 
     const panel = document.getElementById('cube-panel');
     if(panel) panel.style.display = 'flex';
@@ -496,10 +501,225 @@ function onCubeDisconnected(){
   cubeConnected = false;
   cubeChar = null;
   setCubeStatus('🔵 Conectar Cubo', null);
+  const sDot = document.getElementById('smartcube-status-dot');
+  if(sDot) sDot.style.background = 'var(--muted)';
   showToast('Cubo desconectado.');
+  if(typeof updateDeviceButtonLabel !== 'undefined') updateDeviceButtonLabel();
+  if(typeof updateDisconnectBtn    !== 'undefined') updateDisconnectBtn();
   const panel = document.getElementById('cube-panel');
   if(panel) panel.style.display = 'none';
   cubeMoveHistory = [];
   recvBuffer = [];
   recvExpected = 0;
+}
+
+// ═══════════════════════════════════════════════
+//  GAN TIMER FÍSICO — Bluetooth LE
+//  Protocolo GAN Smart Timer (série GAN 12)
+//  O timer envia o tempo via BLE quando a solve termina
+// ═══════════════════════════════════════════════
+
+// UUIDs do GAN Timer
+const GAN_TIMER_SERVICE      = '0000fff0-0000-1000-8000-00805f9b34fb';
+const GAN_TIMER_CHAR_NOTIFY  = '0000fff4-0000-1000-8000-00805f9b34fb'; // notificações de tempo
+const GAN_TIMER_CHAR_WRITE   = '0000fff5-0000-1000-8000-00805f9b34fb'; // comandos (opcional)
+
+let ganTimerDevice    = null;
+let ganTimerChar      = null;
+let ganTimerConnected = false;
+
+// ── Recebe dados do GAN Timer ─────────────────
+// Protocolo GAN Timer:
+// O timer envia pacotes de 10 bytes quando a solve termina:
+// [0x05, 0x00, t3, t2, t1, t0, ...rest]
+// t3..t0 = tempo em ms (big-endian, 32 bits)
+// Também envia status (mãos apoiadas, cubo levantado, etc.)
+function onGanTimerData(event) {
+  const raw = new Uint8Array(event.target.value.buffer);
+  console.log('[GAN] Raw:', Array.from(raw).map(x => x.toString(16).padStart(2,'0')).join(' '));
+
+  if (raw.length < 1) return;
+
+  const type = raw[0];
+
+  // Tipo 0x05 — tempo final da solve
+  if (type === 0x05 && raw.length >= 6) {
+    const ms = ((raw[2] << 24) | (raw[3] << 16) | (raw[4] << 8) | raw[5]) >>> 0;
+    console.log('[GAN] Tempo recebido:', ms, 'ms →', fmtTime(ms));
+    onGanTimerSolve(ms);
+    return;
+  }
+
+  // Tipo 0x01 — mãos apoiadas no timer (reset/ready)
+  if (type === 0x01) {
+    console.log('[GAN] Mãos apoiadas — timer pronto');
+    updateGanTimerStatus('ready');
+    return;
+  }
+
+  // Tipo 0x02 — mãos levantadas (iniciou cronometrar)
+  if (type === 0x02) {
+    console.log('[GAN] Timer iniciado');
+    updateGanTimerStatus('running');
+    return;
+  }
+
+  // Tipo 0x03 — cubo pego (solve iniciada)
+  if (type === 0x03) {
+    console.log('[GAN] Cubo pego');
+    return;
+  }
+
+  // Tipo 0x06 — penalidade (+2 ou DNF detectado pelo timer)
+  if (type === 0x06 && raw.length >= 2) {
+    const penalty = raw[1];
+    if (penalty === 0x01) {
+      console.log('[GAN] Penalidade +2 detectada pelo timer físico');
+    } else if (penalty === 0x02) {
+      console.log('[GAN] DNF detectado pelo timer físico');
+    }
+    return;
+  }
+
+  console.log('[GAN] Pacote desconhecido tipo:', '0x' + type.toString(16));
+}
+
+// ── Tempo recebido do timer físico ────────────
+function onGanTimerSolve(ms) {
+  // Exibe e salva como se fosse uma solve normal
+  setTimerState(STATE.IDLE);
+  setHint('idle');
+  showTimerWithDelta(ms);
+  setFocusMode(false);
+  saveTime(ms);
+  showToast('⏱ ' + fmtTime(ms) + ' (GAN Timer)');
+}
+
+// ── Status visual do GAN Timer ────────────────
+function updateGanTimerStatus(status) {
+  const dot  = document.getElementById('gan-timer-dot');
+  const text = document.getElementById('gan-timer-status-text');
+  if (!dot || !text) return;
+  if (status === 'ready') {
+    dot.style.background  = '#fbbf24';
+    text.textContent      = 'Pronto';
+  } else if (status === 'running') {
+    dot.style.background  = '#4ade80';
+    text.textContent      = 'Cronometrando...';
+  } else {
+    dot.style.background  = '#7dd3fc';
+    text.textContent      = 'Conectado';
+  }
+}
+
+// ── Conectar GAN Timer ────────────────────────
+async function connectGanTimer() {
+  if (!navigator.bluetooth) {
+    showToast('Use Chrome ou Edge para conectar o timer.');
+    return;
+  }
+  if (ganTimerConnected) {
+    disconnectGanTimer();
+    return;
+  }
+
+  try {
+    setGanTimerBtnStatus('🔵 Conectando...', '#7dd3fc');
+
+    ganTimerDevice = await navigator.bluetooth.requestDevice({
+      filters: [
+        { namePrefix: 'GAN' },
+        { namePrefix: 'Gan' },
+        { namePrefix: 'G2' },    // GAN Timer 2
+        { namePrefix: 'GT' },    // variações
+      ],
+      optionalServices: [GAN_TIMER_SERVICE],
+    });
+
+    ganTimerDevice.addEventListener('gattserverdisconnected', onGanTimerDisconnected);
+
+    const server  = await ganTimerDevice.gatt.connect();
+    const service = await server.getPrimaryService(GAN_TIMER_SERVICE);
+    ganTimerChar  = await service.getCharacteristic(GAN_TIMER_CHAR_NOTIFY);
+
+    await ganTimerChar.startNotifications();
+    ganTimerChar.addEventListener('characteristicvaluechanged', onGanTimerData);
+
+    ganTimerConnected = true;
+    const name = ganTimerDevice.name || 'GAN Timer';
+    setGanTimerBtnStatus('🟢 ' + name, '#4adb8a');
+    showToast('✅ ' + name + ' conectado! Use o timer físico para registrar tempos.');
+
+    // Mostra painel do GAN Timer
+    const panel = document.getElementById('gan-timer-panel');
+    if (panel) panel.style.display = 'flex';
+
+  } catch (err) {
+    ganTimerConnected = false;
+    console.error('[GAN]', err);
+    if (err.name !== 'NotFoundError') {
+      setGanTimerBtnStatus('❌ Erro', '#e8584a');
+      showToast('Erro GAN Timer: ' + err.message);
+      setTimeout(() => setGanTimerBtnStatus('⏱ Conectar GAN Timer', null), 4000);
+    } else {
+      setGanTimerBtnStatus('⏱ Conectar GAN Timer', null);
+    }
+  }
+}
+
+function disconnectGanTimer() {
+  if (ganTimerDevice?.gatt?.connected) ganTimerDevice.gatt.disconnect();
+  onGanTimerDisconnected();
+}
+
+function onGanTimerDisconnected() {
+  ganTimerConnected = false;
+  ganTimerChar      = null;
+  setGanTimerBtnStatus('⏱ Conectar GAN Timer', null);
+  showToast('GAN Timer desconectado.');
+  const panel = document.getElementById('gan-timer-panel');
+  if (panel) panel.style.display = 'none';
+  // Restaura label do botão principal se nada conectado
+  const label = document.getElementById('btn-device-label');
+  if (label && !cubeConnected) label.textContent = '🔌 Dispositivo';
+  updateDisconnectBtn();
+}
+
+function setGanTimerBtnStatus(text, color) {
+  // Atualiza dot do menu de dispositivos
+  const dot = document.getElementById('gantimer-status-dot');
+  if (dot) dot.style.background = color || 'var(--muted)';
+  // Atualiza dot do painel
+  const dotPanel = document.getElementById('gan-timer-dot-panel');
+  if (dotPanel) dotPanel.style.background = color || 'var(--muted)';
+  // Atualiza label principal se este for o dispositivo ativo
+  const label = document.getElementById('btn-device-label');
+  if (label && ganTimerConnected) label.textContent = '⏱ GAN Timer';
+  else if (label && !cubeConnected && !ganTimerConnected) label.textContent = '🔌 Dispositivo';
+}
+
+// ── Helpers de menu de dispositivos ──────────
+function updateDisconnectBtn() {
+  const btn = document.getElementById('btn-disconnect-all');
+  if (btn) btn.style.display = (cubeConnected || ganTimerConnected) ? 'flex' : 'none';
+}
+
+function disconnectAllDevices() {
+  if (cubeConnected)     disconnectSmartCube();
+  if (ganTimerConnected) disconnectGanTimer();
+  const label = document.getElementById('btn-device-label');
+  if (label) label.textContent = '🔌 Dispositivo';
+}
+
+// Atualiza setCubeStatus para também gerenciar o label e disconnect btn
+const _origSetCubeStatus = setCubeStatus;
+function setCubeStatus(text, color) {
+  const dot = document.getElementById('smartcube-status-dot');
+  if (dot) dot.style.background = color || 'var(--muted)';
+  const dotOld = document.getElementById('cube-bt-dot');
+  if (dotOld) dotOld.style.background = color || 'var(--muted)';
+  const label = document.getElementById('btn-device-label');
+  if (label && cubeConnected) label.textContent = '🧩 Smart Cube';
+  else if (label && !cubeConnected && !ganTimerConnected) label.textContent = '🔌 Dispositivo';
+  updateDisconnectBtn();
 }
