@@ -1,6 +1,6 @@
 //  STORAGE
 // ═══════════════════════════════════════════════
-const APP_VERSION = '0.8.1';
+const APP_VERSION = '1.7.0';
 const STORE_KEY   = 'cubetimer_v1';
 
 // ── Configurações (declarado cedo para evitar erros de hoisting) ──
@@ -148,8 +148,6 @@ let data = storageLoad();
 // idle → (hold) → inspection → (hold) → running → idle
 const STATE = { IDLE:'idle', HOLDING:'holding', READY:'ready', INSPECTION:'inspection', RUNNING:'running' };
 let timerState = STATE.IDLE;
-window.STATE = STATE;
-Object.defineProperty(window, 'timerState', { get: () => timerState, set: v => { timerState = v; } });
 let startTime  = 0;
 let rafId      = null;
 let holdTimer  = null;
@@ -160,7 +158,6 @@ let cameFromInspection = false;
 
 // ── DOM refs ──
 const elTimer    = document.getElementById('timer');
-window.elTimer = elTimer;
 const elHint     = document.getElementById('hint');
 const elScramble = document.getElementById('scramble');
 const elHistory  = document.getElementById('history');
@@ -333,7 +330,6 @@ function startRunning() {
   clearTimeout(holdTimer);
   elTimer.style.color = '';
   elTimer.style.animation = '';
-  elTimer.textContent = '0.00'; // limpa delta anterior
   setTimerState(STATE.RUNNING);
   setHint('running');
   startTime = Date.now();
@@ -394,7 +390,6 @@ function startInspection() {
   }, 1000);
 }
 
-window.setFocusMode = function(on) { setFocusMode(on); };
 function setFocusMode(on) {
   document.querySelector('.layout').classList.toggle('focus-mode', on);
   document.querySelector('.header').style.opacity = on ? '0' : '1';
@@ -402,25 +397,7 @@ function setFocusMode(on) {
   const preview = document.getElementById('scramble-preview');
   if (preview) { preview.style.opacity = on ? '0' : '1'; preview.style.pointerEvents = on ? 'none' : ''; }
 }
-
-window.showTimerWithDelta = function(t) { showTimerWithDelta(t); };
-function showTimerWithDelta(t) {
-  const entries = currentTimes();
-  // Pega o penúltimo tempo (o último ainda não foi salvo neste momento)
-  const validPrev = entries.filter(e => !e.dnf && typeof e.ms === 'number');
-  if (validPrev.length > 0) {
-    const prev  = validPrev[validPrev.length - 1].ms;
-    const delta = t - prev;
-    const sign  = delta < 0 ? '' : '+';
-    const color = delta < 0 ? 'var(--success)' : 'var(--danger)';
-    const deltaStr = sign + (delta / 1000).toFixed(2).replace('.', ',');
-    elTimer.innerHTML =
-      fmtTime(t) +
-      ` <span id="timer-delta" style="font-size:0.38em;color:${color};font-family:var(--mono);font-weight:400;vertical-align:middle;opacity:0.9;">(${deltaStr})</span>`;
-  } else {
-    elTimer.textContent = fmtTime(t);
-  }
-}
+window.setFocusMode = setFocusMode;
 
 function pressDown() {
   if (timerState === STATE.RUNNING) {
@@ -428,7 +405,7 @@ function pressDown() {
     const t = Date.now() - startTime;
     setTimerState(STATE.IDLE);
     setHint('idle');
-    showTimerWithDelta(t);
+    elTimer.textContent = fmtTime(t);
     setFocusMode(false);
     saveTime(t);
     return;
@@ -492,7 +469,6 @@ function cancelTimer() {
   showToast('Cancelado.');
 }
 
-window.saveTime = function(t) { saveTime(t); };
 function saveTime(t) {
   const scramble = elScramble.textContent || '';
   data.sessions[data.active].push({ ms: t, dnf: false, scramble });
@@ -2612,82 +2588,6 @@ function toggleSettings() {
   const panel = document.getElementById('settings-panel');
   const isOpen = panel.classList.toggle('open');
   if (isOpen) loadCfgUI();
-}
-
-// ═══════════════════════════════════════════════
-//  MENU DE DISPOSITIVOS
-// ═══════════════════════════════════════════════
-function toggleDeviceMenu() {
-  const menu = document.getElementById('device-connect-menu');
-  if (!menu) return;
-  const isOpen = menu.style.display === 'block';
-  menu.style.display = isOpen ? 'none' : 'block';
-  if (!isOpen) {
-    setTimeout(() => {
-      document.addEventListener('click', closeDeviceMenuOnOutside, { once: true });
-    }, 0);
-  }
-}
-
-function closeDeviceMenu() {
-  const menu = document.getElementById('device-connect-menu');
-  if (menu) menu.style.display = 'none';
-}
-
-function closeDeviceMenuOnOutside(e) {
-  const wrapper = document.getElementById('device-connect-wrapper');
-  if (wrapper && !wrapper.contains(e.target)) closeDeviceMenu();
-}
-
-function updateDeviceButtonLabel() {
-  const label = document.getElementById('btn-device-label');
-  const dot   = document.getElementById('cube-bt-dot');
-  if (!label) return;
-  const smartOk = typeof cubeConnected !== 'undefined' && cubeConnected;
-  const ganOk   = typeof ganConnected  !== 'undefined' && ganConnected;
-  if (smartOk && ganOk) {
-    label.textContent    = '🟢 2 dispositivos';
-    if (dot) dot.style.background = '#4adb8a';
-  } else if (smartOk) {
-    label.textContent    = '🟢 Smart Cube';
-    if (dot) dot.style.background = '#4adb8a';
-  } else if (ganOk) {
-    label.textContent    = '🟢 GAN Timer';
-    if (dot) dot.style.background = '#4adb8a';
-  } else {
-    label.textContent    = '🔌 Dispositivo';
-    if (dot) dot.style.background = 'var(--muted)';
-  }
-}
-
-function updateDisconnectBtn() {
-  const btn = document.getElementById('btn-disconnect-all');
-  if (!btn) return;
-  const anyConnected = (typeof ganConnected !== 'undefined' && ganConnected) ||
-                       (typeof cubeConnected !== 'undefined' && cubeConnected);
-  btn.style.display = anyConnected ? 'flex' : 'none';
-}
-
-function disconnectAllDevices() {
-  if (typeof disconnectSmartCube !== 'undefined' && typeof cubeConnected !== 'undefined' && cubeConnected) {
-    disconnectSmartCube();
-  }
-  if (typeof disconnectGanTimer !== 'undefined' && typeof ganConnected !== 'undefined' && ganConnected) {
-    disconnectGanTimer();
-  }
-  updateDeviceButtonLabel();
-  updateDisconnectBtn();
-}
-
-// Expõe utilitários para dispositivos externos
-window.fmtTime  = fmtTime;
-window.showToast = showToast;
-window.newScramble = newScramble;
-
-// Stubs seguros caso gantimer.js não carregue
-if (typeof connectGanTimer === 'undefined') {
-  window.connectGanTimer    = () => showToast('gantimer.js não encontrado na pasta js/.');
-  window.disconnectGanTimer = () => {};
 }
 
 newScramble();
