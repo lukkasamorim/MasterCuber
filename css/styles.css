@@ -24,7 +24,7 @@
     body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
 
     /* Header */
-    .header { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 10; gap: 10px; flex-wrap: wrap; }
+    .header { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 200; gap: 10px; flex-wrap: wrap; overflow: visible; }
     .header-left { display: flex; align-items: center; gap: 10px; }
     .logo { font-family: var(--mono); font-size: 15px; font-weight: 700; }
     .vbadge {
@@ -1078,3 +1078,39 @@
     .ranked-result-total { font-size: 13px; color: var(--muted); }
     .ranked-result-win  .ranked-result-title { color: #4ade80; }
     .ranked-result-loss .ranked-result-title { color: var(--danger); }
+
+    /* ── Menu de dispositivos ── */
+    .device-connect-wrapper {
+      position: relative;
+    }
+    .device-connect-main {
+      white-space: nowrap;
+    }
+    .device-connect-menu {
+      position: absolute; top: calc(100% + 8px); right: 0;
+      background: var(--surface); border: 1px solid var(--border2);
+      border-radius: var(--rl); box-shadow: 0 8px 32px rgba(0,0,0,.5);
+      min-width: 260px; z-index: 300; overflow: hidden;
+      animation: deviceMenuIn .15s ease;
+    }
+    @keyframes deviceMenuIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .device-menu-title {
+      font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px;
+      color: var(--muted); padding: 12px 16px 8px; text-transform: uppercase;
+    }
+    .device-menu-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 16px; width: 100%; background: none; border: none;
+      cursor: pointer; text-align: left; transition: background .1s;
+      color: var(--text);
+    }
+    .device-menu-item:hover { background: var(--surface2); }
+    .device-menu-icon { font-size: 20px; flex-shrink: 0; }
+    .device-menu-name { font-size: 13px; font-weight: 600; color: var(--text); }
+    .device-menu-sub  { font-size: 11px; color: var(--muted); margin-top: 1px; }
+    .device-menu-status { margin-left: auto; flex-shrink: 0; }
+    .device-menu-divider { height: 1px; background: var(--border); margin: 4px 0; }
+    .device-menu-disconnect .device-menu-name { color: var(--danger); }
