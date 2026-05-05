@@ -397,7 +397,6 @@ function setFocusMode(on) {
   const preview = document.getElementById('scramble-preview');
   if (preview) { preview.style.opacity = on ? '0' : '1'; preview.style.pointerEvents = on ? 'none' : ''; }
 }
-window.setFocusMode = setFocusMode;
 
 function pressDown() {
   if (timerState === STATE.RUNNING) {
@@ -2589,6 +2588,102 @@ function toggleSettings() {
   const isOpen = panel.classList.toggle('open');
   if (isOpen) loadCfgUI();
 }
+
+// ═══════════════════════════════════════════════
+//  MENU DE DISPOSITIVOS
+// ═══════════════════════════════════════════════
+function toggleDeviceMenu() {
+  const menu = document.getElementById('device-connect-menu');
+  if (!menu) return;
+  const isOpen = menu.style.display === 'block';
+  menu.style.display = isOpen ? 'none' : 'block';
+  if (!isOpen) {
+    setTimeout(() => {
+      document.addEventListener('click', closeDeviceMenuOnOutside, { once: true });
+    }, 0);
+  }
+}
+
+function closeDeviceMenu() {
+  const menu = document.getElementById('device-connect-menu');
+  if (menu) menu.style.display = 'none';
+}
+
+function closeDeviceMenuOnOutside(e) {
+  const wrapper = document.getElementById('device-connect-wrapper');
+  if (wrapper && !wrapper.contains(e.target)) closeDeviceMenu();
+}
+
+function updateDeviceButtonLabel() {
+  const label = document.getElementById('btn-device-label');
+  const dot   = document.getElementById('cube-bt-dot');
+  if (!label) return;
+  const smartOk = typeof cubeConnected !== 'undefined' && cubeConnected;
+  const ganOk   = typeof ganConnected  !== 'undefined' && ganConnected;
+  if (smartOk && ganOk) {
+    label.textContent = '🟢 2 dispositivos';
+    if (dot) dot.style.background = '#4adb8a';
+  } else if (smartOk) {
+    label.textContent = '🟢 Smart Cube';
+    if (dot) dot.style.background = '#4adb8a';
+  } else if (ganOk) {
+    label.textContent = '🟢 GAN Timer';
+    if (dot) dot.style.background = '#4adb8a';
+  } else {
+    label.textContent = '🔌 Dispositivo';
+    if (dot) dot.style.background = 'var(--muted)';
+  }
+}
+
+function updateDisconnectBtn() {
+  const btn = document.getElementById('btn-disconnect-all');
+  if (!btn) return;
+  const anyConnected = (typeof ganConnected !== 'undefined' && ganConnected) ||
+                       (typeof cubeConnected !== 'undefined' && cubeConnected);
+  btn.style.display = anyConnected ? 'flex' : 'none';
+}
+
+function disconnectAllDevices() {
+  if (typeof disconnectSmartCube !== 'undefined' && typeof cubeConnected !== 'undefined' && cubeConnected) {
+    disconnectSmartCube();
+  }
+  if (typeof disconnectGanTimer !== 'undefined' && typeof ganConnected !== 'undefined' && ganConnected) {
+    disconnectGanTimer();
+  }
+  updateDeviceButtonLabel();
+  updateDisconnectBtn();
+}
+
+// Expõe utilitários para dispositivos externos
+window.fmtTime   = fmtTime;
+window.showToast = showToast;
+window.newScramble = newScramble;
+window.saveTime  = saveTime;
+window.showTimerWithDelta = function(t) {
+  const entries = currentTimes();
+  const validPrev = entries.filter(e => !e.dnf && typeof e.ms === 'number');
+  if (validPrev.length > 0) {
+    const prev  = validPrev[validPrev.length - 1].ms;
+    const delta = t - prev;
+    const sign  = delta < 0 ? '' : '+';
+    const color = delta < 0 ? 'var(--success)' : 'var(--danger)';
+    const deltaStr = sign + (delta / 1000).toFixed(2).replace('.', ',');
+    elTimer.innerHTML = fmtTime(t) +
+      ` <span style="font-size:0.38em;color:${color};font-family:var(--mono);font-weight:400;vertical-align:middle;opacity:0.9;">(${deltaStr})</span>`;
+  } else {
+    elTimer.textContent = fmtTime(t);
+  }
+};
+window.STATE = STATE;
+window.elTimer = elTimer;
+Object.defineProperty(window, 'timerState', { get: () => timerState, set: v => { timerState = v; } });
+
+// Stubs seguros caso gantimer.js não carregue
+if (typeof connectGanTimer === 'undefined') {
+  window.connectGanTimer    = () => showToast('gantimer.js não encontrado na pasta js/.');
+  window.disconnectGanTimer = () => {};
+}
+
 
 newScramble();
 applyDedicatedMobileLayout();
