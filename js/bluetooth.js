@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════
-//  SMART CUBE BLUETOOTH — QiYi Tornado V4
+//  SMART CUBE BLUETOOTH — QiYi Tornado V3
 //  Protocolo baseado no cstimer (parseQYData)
 //  Ref: github.com/cs-bin/cstimer
 // ═══════════════════════════════════════════════
