@@ -21,7 +21,7 @@
 <header class="header">
   <div class="header-left">
     <span class="logo">CubeTimer</span>
-    <span class="vbadge">v0.7.0</span>
+    <span class="vbadge">v0.8.0</span>
   </div>
   <div class="header-right">
     <button class="btn btn-ghost btn-sm" id="btn-show-preview" onclick="toggleScramblePreview()" title="Mostrar prévia do scramble" style="display:none">⬛ Prévia</button>
@@ -30,10 +30,36 @@
       <span class="online-dot"></span>
       <span id="online-count">0</span> online
     </button>
-    <button class="btn btn-ghost btn-sm" id="btn-cube-connect" onclick="connectSmartCube()" title="Conectar Smart Cube" style="display:flex;align-items:center;gap:6px;">
-      <span id="cube-bt-dot" style="width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block;"></span>
-      🔵 Conectar Cubo
-    </button>
+    <div class="device-connect-wrapper" id="device-connect-wrapper">
+      <button class="btn btn-ghost btn-sm device-connect-main" id="btn-device-main" onclick="toggleDeviceMenu()" style="display:flex;align-items:center;gap:6px;">
+        <span id="cube-bt-dot" style="width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block;"></span>
+        <span id="btn-device-label">🔌 Dispositivo</span>
+      </button>
+      <div class="device-connect-menu" id="device-connect-menu" style="display:none;">
+        <div class="device-menu-title">Conectar dispositivo</div>
+        <button class="device-menu-item" onclick="connectSmartCube(); closeDeviceMenu()">
+          <span class="device-menu-icon">🧩</span>
+          <div>
+            <div class="device-menu-name">Smart Cube</div>
+            <div class="device-menu-sub">QiYi Tornado V3 via Bluetooth</div>
+          </div>
+          <span class="device-menu-status" id="smartcube-status-dot" style="width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block;"></span>
+        </button>
+        <button class="device-menu-item" onclick="connectGanTimer(); closeDeviceMenu()">
+          <span class="device-menu-icon">⏱</span>
+          <div>
+            <div class="device-menu-name">Timer Físico GAN</div>
+            <div class="device-menu-sub">GAN Timer via USB/Serial</div>
+          </div>
+          <span class="device-menu-status" id="gantimer-status-dot" style="width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block;"></span>
+        </button>
+        <div class="device-menu-divider"></div>
+        <button class="device-menu-item device-menu-disconnect" id="btn-disconnect-all" onclick="disconnectAllDevices(); closeDeviceMenu()" style="display:none;">
+          <span class="device-menu-icon">🔌</span>
+          <div><div class="device-menu-name">Desconectar tudo</div></div>
+        </button>
+      </div>
+    </div>
     <button class="btn btn-ghost btn-sm" id="settings-btn" onclick="toggleSettings()" title="Configurações">⚙️</button>
   </div>
 </header>
@@ -101,10 +127,28 @@
         <div class="timer-display idle" id="timer">0.00</div>
         <div class="timer-hint" id="hint">segure <kbd>espaço</kbd> para iniciar &nbsp;·&nbsp; ou aperte <kbd>espaço</kbd> para inspecionar</div>
             <!-- Painel Smart Cube -->
+      <!-- Painel Smart Cube -->
       <div id="cube-panel" style="display:none;flex-direction:column;align-items:center;gap:8px;margin-top:16px;">
         <div style="font-family:var(--mono);font-size:10px;letter-spacing:1.5px;color:var(--muted);">SMART CUBE</div>
         <div id="cube-move-display" style="font-family:var(--mono);font-size:48px;font-weight:700;color:var(--accent);opacity:0.3;transition:opacity .1s;min-height:60px;line-height:1;">—</div>
         <div id="cube-move-history" style="font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:2px;min-height:20px;"></div>
+      </div>
+
+      <!-- Painel GAN Timer físico -->
+      <div id="gan-timer-panel" style="display:none;flex-direction:column;align-items:center;gap:6px;margin-top:12px;padding:12px 16px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);width:100%;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span id="gan-timer-dot-panel" style="width:8px;height:8px;border-radius:50%;background:#4adb8a;display:inline-block;"></span>
+          <span style="font-family:var(--mono);font-size:11px;letter-spacing:1px;color:var(--muted);">GAN TIMER</span>
+          <span id="gan-timer-status-text" style="font-family:var(--mono);font-size:11px;color:var(--accent);">Conectado</span>
+        </div>
+        <p style="font-size:11px;color:var(--muted);text-align:center;line-height:1.5;">Use o timer físico normalmente.<br>O tempo será registrado automaticamente aqui.</p>
+      </div>
+
+      <!-- Painel GAN Timer -->
+      <div id="gan-timer-panel" style="display:none;flex-direction:column;align-items:center;gap:6px;margin-top:16px;">
+        <div style="font-family:var(--mono);font-size:10px;letter-spacing:1.5px;color:var(--muted);">GAN TIMER</div>
+        <div id="gan-timer-display" style="font-family:var(--mono);font-size:36px;font-weight:700;color:var(--accent);min-height:48px;line-height:1;">—</div>
+        <div id="gan-timer-state" style="font-size:11px;color:var(--muted);font-family:var(--mono);">aguardando...</div>
       </div>
     </div>
     </div>
@@ -232,7 +276,7 @@
 <div id="page-login" class="login-page" style="display:none">
   <div class="login-inner">
     <div class="login-hero">
-      <div class="login-hero-badge">v1.7.0</div>
+      <div class="login-hero-badge">v1.8.0</div>
       <div class="login-hero-icon">🧊</div>
       <div class="login-hero-title">CubeTimer</div>
       <div class="login-hero-sub">Escolha um modo para começar.</div>
@@ -768,6 +812,7 @@
   </div>
 </div>
 <script src="js/bluetooth.js"></script>
+<script src="js/gantimer.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
