@@ -107,37 +107,70 @@ function processGanTimerData(bytes) {
   if (stackmatBuffer.length > 100) stackmatBuffer.splice(0, stackmatBuffer.length - 50);
 }
 
+// ── Helpers para acessar o app.js com segurança ─
+function appEl()       { return window.elTimer; }
+function appState()    { return window.timerState; }
+function appSTATE()    { return window.STATE; }
+function appFmt(ms)    { return window.fmtTime ? window.fmtTime(ms) : ms.toString(); }
+function appSave(t)    { if (window.saveTime) window.saveTime(t); }
+function appDelta(t)   { if (window.showTimerWithDelta) window.showTimerWithDelta(t); }
+function appFocus(on)  { if (window.setFocusMode) window.setFocusMode(on); }
+function appToast(msg) { if (window.showToast) window.showToast(msg); }
+function appScramble() { if (window.newScramble) window.newScramble(); }
+
 function handleStackmatPacket(packet) {
   const { status, totalMs, running, stopped, hands } = packet;
+  const STATE = appSTATE();
 
-  // Atualiza display do painel
+  // Atualiza display do painel lateral
   updateGanTimerDisplay(totalMs, status);
 
-  // Detecta transição rodando → parado (solve completo)
+  // ── Transição RODANDO → PARADO: solve finalizada ──
   if (ganWasRunning && stopped && totalMs > 0) {
     ganWasRunning = false;
     ganLastMs = totalMs;
     onGanTimerStopped(totalMs);
+    ganLastState = packet;
     return;
   }
 
-  if (running) {
+  // ── Timer iniciou no físico ──
+  if (running && !ganWasRunning) {
     ganWasRunning = true;
     ganLastMs = totalMs;
+    // Cancela qualquer interação manual no app
+    if (STATE && appState() !== STATE.IDLE) {
+      // já está rodando via teclado, ignora
+    } else {
+      updateGanTimerState('rodando...');
+      startGanTimerSync();
+    }
+  } else if (running) {
+    ganLastMs = totalMs;
+  }
 
-    // Sincroniza o timer do app se estiver idle
-    if (typeof timerState !== 'undefined') {
-      if (timerState === STATE.IDLE || timerState === STATE.INSPECTION) {
-        startGanTimerSync();
-      }
+  // ── Mãos no pad → pronto para iniciar ──
+  if (hands) {
+    ganWasRunning = false;
+    updateGanTimerState('pronto...');
+    // Limpa o timer visual para 0
+    const el = appEl();
+    if (el && STATE && appState() === STATE.IDLE) {
+      el.textContent = '0.00';
+      el.className   = 'timer-display idle';
+      el.style.color = '';
     }
   }
 
-  // Mãos no pad → reseta estado
-  if (hands && totalMs === 0) {
+  // ── Timer resetado (status I) ──
+  if (status === 'I' || (stopped && totalMs === 0)) {
     ganWasRunning = false;
-    if (typeof timerState !== 'undefined' && timerState === STATE.IDLE) {
-      updateGanTimerState('mãos detectadas...');
+    updateGanTimerState('aguardando...');
+    const el = appEl();
+    if (el && STATE && appState() === STATE.IDLE) {
+      el.textContent = '0.00';
+      el.className   = 'timer-display idle';
+      el.style.color = '';
     }
   }
 
@@ -148,16 +181,18 @@ function handleStackmatPacket(packet) {
 let ganSyncRaf = null;
 
 function startGanTimerSync() {
-  // Exibe o tempo do GAN diretamente no timer principal
-  if (ganSyncRaf) return;
+  if (ganSyncRaf) return;   // já está sincronizando
 
   const tick = () => {
-    if (!ganConnected || !ganWasRunning) { ganSyncRaf = null; return; }
-    if (ganLastState) {
-      if (typeof elTimer !== 'undefined') {
-        elTimer.textContent = fmtTime(ganLastMs);
-        elTimer.className   = 'timer-display running';
-      }
+    if (!ganConnected || !ganWasRunning) {
+      ganSyncRaf = null;
+      return;
+    }
+    const el = appEl();
+    if (el) {
+      el.textContent = appFmt(ganLastMs);
+      el.className   = 'timer-display running';
+      el.style.color = '';
     }
     ganSyncRaf = requestAnimationFrame(tick);
   };
@@ -168,25 +203,28 @@ function onGanTimerStopped(totalMs) {
   cancelAnimationFrame(ganSyncRaf);
   ganSyncRaf = null;
 
-  if (typeof elTimer !== 'undefined') {
-    showTimerWithDelta(totalMs);
-    elTimer.className = 'timer-display idle';
+  // Mostra o tempo final com delta no timer do app
+  const el = appEl();
+  if (el) {
+    appDelta(totalMs);           // showTimerWithDelta
+    el.className   = 'timer-display idle';
+    el.style.color = '';
   }
 
-  if (typeof setFocusMode !== 'undefined') setFocusMode(false);
+  appFocus(false);               // setFocusMode(false)
 
-  if (ganSaveOnStop && typeof saveTime !== 'undefined' && totalMs > 0) {
-    saveTime(totalMs);
-    showToast('⏱ GAN Timer: ' + fmtTime(totalMs));
+  // Salva no histórico e gera novo scramble
+  if (ganSaveOnStop && totalMs > 0) {
+    appSave(totalMs);            // saveTime (já mostra toast e gera scramble)
   }
 
-  updateGanTimerState('tempo registrado');
+  updateGanTimerState('✅ tempo salvo');
 }
 
 // ── UI do painel ───────────────────────────────
 function updateGanTimerDisplay(ms, status) {
   const el = document.getElementById('gan-timer-display');
-  if (el) el.textContent = ms > 0 ? fmtTime(ms) : '0.00';
+  if (el) el.textContent = ms > 0 ? appFmt(ms) : '0.00';
 }
 
 function updateGanTimerState(text) {
@@ -308,82 +346,15 @@ function onGanTimerDisconnected() {
   stackmatBuffer = [];
 }
 
-// ── Menu de dispositivos ───────────────────────
-function toggleDeviceMenu() {
-  const menu = document.getElementById('device-connect-menu');
-  if (!menu) return;
-  const open = menu.style.display === 'none' || !menu.style.display;
-  menu.style.display = open ? 'block' : 'none';
-  if (open) {
-    // Fecha ao clicar fora
-    setTimeout(() => {
-      document.addEventListener('click', closeDeviceMenuOnOutside, { once: true });
-    }, 0);
-  }
-}
-
-function closeDeviceMenu() {
-  const menu = document.getElementById('device-connect-menu');
-  if (menu) menu.style.display = 'none';
-}
-
-function closeDeviceMenuOnOutside(e) {
-  const wrapper = document.getElementById('device-connect-wrapper');
-  if (wrapper && !wrapper.contains(e.target)) closeDeviceMenu();
-}
-
-function updateDeviceButtonLabel() {
-  const label  = document.getElementById('btn-device-label');
-  const dot    = document.getElementById('cube-bt-dot');
-  if (!label) return;
-
-  const smartOk = typeof cubeConnected !== 'undefined' && cubeConnected;
-  const ganOk   = ganConnected;
-
-  if (smartOk && ganOk) {
-    label.textContent = '🟢 2 dispositivos';
-    dot.style.background = '#4adb8a';
-  } else if (smartOk) {
-    label.textContent = '🟢 Smart Cube';
-    dot.style.background = '#4adb8a';
-  } else if (ganOk) {
-    label.textContent = '🟢 GAN Timer';
-    dot.style.background = '#4adb8a';
-  } else {
-    label.textContent = '🔌 Dispositivo';
-    dot.style.background = 'var(--muted)';
-  }
-}
-
-function updateDisconnectBtn() {
-  const btn = document.getElementById('btn-disconnect-all');
-  if (!btn) return;
-  const anyConnected = ganConnected || (typeof cubeConnected !== 'undefined' && cubeConnected);
-  btn.style.display = anyConnected ? 'flex' : 'none';
-}
-
-function disconnectAllDevices() {
-  if (typeof disconnectSmartCube !== 'undefined' && typeof cubeConnected !== 'undefined' && cubeConnected) {
-    disconnectSmartCube();
-  }
-  if (ganConnected) disconnectGanTimer();
-  updateDeviceButtonLabel();
-  updateDisconnectBtn();
-}
-
 // ── Integração com bluetooth.js ────────────────
-// Sobrescreve setCubeStatus para também atualizar o label unificado
-const _origSetCubeStatus = typeof setCubeStatus !== 'undefined' ? setCubeStatus : null;
+// Sincroniza o dot do smart cube no submenu a cada segundo
 window.addEventListener('load', () => {
-  // Patch no setCubeStatus original para sincronizar o dot do smart cube
-  const smartDot = document.getElementById('smartcube-status-dot');
-  if (smartDot) {
-    // Observer que atualiza o smartcube-status-dot sempre que cubeConnected mudar
-    const checkInterval = setInterval(() => {
-      if (typeof cubeConnected === 'undefined') return;
+  setInterval(() => {
+    const smartDot = document.getElementById('smartcube-status-dot');
+    if (smartDot && typeof cubeConnected !== 'undefined') {
       smartDot.style.background = cubeConnected ? '#4adb8a' : 'var(--muted)';
-      updateDeviceButtonLabel();
-      updateDisconnectBtn();
-    }, 1000);
-  }
+    }
+    if (typeof updateDeviceButtonLabel !== 'undefined') updateDeviceButtonLabel();
+    if (typeof updateDisconnectBtn     !== 'undefined') updateDisconnectBtn();
+  }, 1000);
 });
