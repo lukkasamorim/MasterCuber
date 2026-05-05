@@ -148,12 +148,8 @@ let data = storageLoad();
 // idle → (hold) → inspection → (hold) → running → idle
 const STATE = { IDLE:'idle', HOLDING:'holding', READY:'ready', INSPECTION:'inspection', RUNNING:'running' };
 let timerState = STATE.IDLE;
-// Expõe no window para uso por gantimer.js e bluetooth.js
 window.STATE = STATE;
-Object.defineProperty(window, 'timerState', {
-  get: () => timerState,
-  set: (v) => { timerState = v; },
-});
+Object.defineProperty(window, 'timerState', { get: () => timerState, set: v => { timerState = v; } });
 let startTime  = 0;
 let rafId      = null;
 let holdTimer  = null;
@@ -164,7 +160,6 @@ let cameFromInspection = false;
 
 // ── DOM refs ──
 const elTimer    = document.getElementById('timer');
-// Expõe funções e elementos no window para integração com dispositivos externos
 window.elTimer = elTimer;
 const elHint     = document.getElementById('hint');
 const elScramble = document.getElementById('scramble');
@@ -389,12 +384,7 @@ function startInspection() {
         storageSave(data);
         renderAll();
         updateRankWidget();
-        // Expõe funções utilitárias para dispositivos externos
-window.fmtTime             = fmtTime;
-window.showToast           = showToast;
-window.newScramble         = newScramble;
-
-newScramble();
+        newScramble();
         showToast('Tempo esgotado — DNF registrado.');
       } else {
         // Sem DNF automático — apenas para a inspeção e inicia o timer
@@ -502,6 +492,7 @@ function cancelTimer() {
   showToast('Cancelado.');
 }
 
+window.saveTime = function(t) { saveTime(t); };
 function saveTime(t) {
   const scramble = elScramble.textContent || '';
   data.sessions[data.active].push({ ms: t, dnf: false, scramble });
@@ -512,7 +503,6 @@ function saveTime(t) {
   updateRankWidget();
   showPenalties(true);
 }
-window.saveTime = saveTime;
 
 function applyPlus2() {
   const entries = data.sessions[data.active];
@@ -2688,6 +2678,11 @@ function disconnectAllDevices() {
   updateDeviceButtonLabel();
   updateDisconnectBtn();
 }
+
+// Expõe utilitários para dispositivos externos
+window.fmtTime  = fmtTime;
+window.showToast = showToast;
+window.newScramble = newScramble;
 
 // Stubs seguros caso gantimer.js não carregue
 if (typeof connectGanTimer === 'undefined') {
