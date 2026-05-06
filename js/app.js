@@ -1,6 +1,6 @@
 //  STORAGE
 // ═══════════════════════════════════════════════
-const APP_VERSION = '0.9.2';
+const APP_VERSION = '1.7.0';
 const STORE_KEY   = 'cubetimer_v1';
 
 // ── Configurações (declarado cedo para evitar erros de hoisting) ──
@@ -2099,20 +2099,24 @@ async function initPresence() {
 }
 
 // ═══════════════════════════════════════════════
-//  MODO BATALHA
+//  MODO BATALHA — v3
 // ═══════════════════════════════════════════════
-let battleRoom     = null;
-let battleRoundHistory = []; // { round, myMs, oppMs, won }
-let battleIsHost   = false;
-let battlePollId   = null;
-let battleTimerState = 'idle';
-let battleStart    = 0;
-let battleRafId    = null;
-let battleHoldTimer = null;
-let battleHoldReady = false;
+let battleRoom        = null;
+let battleIsHost      = false;
+let battlePollId      = null;
+let battleRealtimePollId = null;  // poll rápido para tempo real
+let battleTimerState  = 'idle';   // idle|holding|ready|inspection|running|done
+let battleStart       = 0;
+let battleRafId       = null;
+let battleHoldTimer   = null;
+let battleHoldReady   = false;
+let battleInspTimer   = null;
+let battleInspLeft    = 0;
+let battleCameFromInsp = false;
 let myWins = 0, oppWins = 0;
 let myRoundDone = false, oppRoundDone = false;
 let myRoundTime = null;
+let battleRoundHistory = []; // { round, myMs, oppMs, won }
 
 function genRoomCode() {
   return Math.random().toString(36).slice(2,8).toUpperCase();
@@ -2139,12 +2143,8 @@ async function createRoom() {
   const code = genRoomCode();
   const scramble = genScramble();
   await sbUpsert('battle_rooms', {
-    id             : code,
-    scramble       : scramble,
-    host_id        : MY_ID,
-    host_nickname  : myProfile.nickname,
-    host_avatar    : myProfile.avatar,
-    status         : 'waiting'
+    id: code, scramble, host_id: MY_ID,
+    host_nickname: myProfile.nickname, host_avatar: myProfile.avatar, status: 'waiting'
   });
   battleRoom   = { id: code, scramble, host_id: MY_ID, status: 'waiting', round: 1 };
   battleIsHost = true;
@@ -2159,14 +2159,11 @@ async function joinRoom() {
   const room = await sbGetRoom(code);
   if (!room) { showToast('Sala não encontrada.'); return; }
   if (room.status !== 'waiting') { showToast('Sala já em andamento.'); return; }
-
-  // Atualiza guest
   await fetch(`${SUPABASE_URL}/rest/v1/battle_rooms?id=eq.${code}`, {
     method: 'PATCH',
     headers: { ...sbHeaders, 'Prefer': 'return=representation' },
     body: JSON.stringify({ guest_id: MY_ID, guest_nickname: myProfile.nickname, guest_avatar: myProfile.avatar, status: 'active' })
   });
-
   battleRoom   = { ...room, guest_id: MY_ID, status: 'active' };
   battleIsHost = false;
   myWins = 0; oppWins = 0;
@@ -2174,7 +2171,7 @@ async function joinRoom() {
   battlePollId = setInterval(pollRoom, 2000);
 }
 
-// ── Polling da sala ──────────────────────────
+// ── Polling principal da sala ─────────────────
 async function pollRoom() {
   if (!battleRoom) return;
   const room = await sbGetRoom(battleRoom.id);
@@ -2188,26 +2185,38 @@ async function pollRoom() {
     return;
   }
 
-  // Checa se o outro jogador finalizou o round
   if (room.status === 'active') {
     const results = await sbGetResults(room.id, room.round);
     const myResult  = results.find(r => r.player_id === MY_ID);
     const oppResult = results.find(r => r.player_id !== MY_ID);
 
-    if (myResult)  { myRoundDone = true;  updateBattleScore(myResult.time_ms, null); }
-    if (oppResult) { oppRoundDone = true; updateBattleScore(null, oppResult.time_ms); }
+    if (myResult)  { myRoundDone = true;  bv3SetMyTime(myResult.time_ms, false); }
+    if (oppResult) { oppRoundDone = true; bv3SetOppTime(oppResult.time_ms, false); }
 
     if (myResult && oppResult) {
-      // Round completo — mostra resultado
       resolveRound(myResult.time_ms, oppResult.time_ms, room);
     }
   }
 
-  // Checa se adversário saiu
   if (room.status === 'abandoned') {
     clearInterval(battlePollId);
+    clearInterval(battleRealtimePollId);
     setBattleStatus('🏆 Adversário saiu. Você venceu!', 'winner');
+    bv3SetPanelBorder('me', 'win');
+    bv3SetPanelBorder('opp', 'loss');
     setTimeout(() => showBattleLobby(), 4000);
+  }
+}
+
+// ── Poll em tempo real (adversário) ──────────
+async function pollRealtime() {
+  if (!battleRoom || battleTimerState === 'done') return;
+  const results = await sbGetResults(battleRoom.id, battleRoom.round);
+  const oppResult = results.find(r => r.player_id !== MY_ID);
+  if (oppResult && !oppRoundDone) {
+    oppRoundDone = true;
+    bv3SetOppTime(oppResult.time_ms, false);
+    clearInterval(battleRealtimePollId);
   }
 }
 
@@ -2215,77 +2224,145 @@ async function pollRoom() {
 function startArena(scramble, round) {
   document.getElementById('battle-lobby').style.display   = 'none';
   document.getElementById('battle-waiting').style.display = 'none';
-  document.getElementById('battle-arena').style.display   = 'flex';
-  document.getElementById('battle-topbar-round').style.display = 'block';
+  document.getElementById('battle-arena').style.display   = 'block';
 
   myRoundDone = false; oppRoundDone = false; myRoundTime = null;
+  battleTimerState = 'idle';
+  clearInterval(battleInspTimer);
 
-  // IDs novos do redesign
   const g = id => document.getElementById(id);
 
-  g('battle-round').textContent      = round;
-  g('battle-round-top').textContent  = round;
-  g('battle-scramble').textContent   = scramble;
-  g('battle-timer').textContent      = '0.00';
-  g('battle-timer').className        = 'timer-display idle';
-  g('battle-hint').innerHTML         = 'segure <kbd>espaço</kbd> para iniciar';
+  g('battle-round').textContent   = round;
+  g('battle-scramble').textContent = scramble;
+  g('battle-timer').textContent    = '0.00';
+  g('battle-timer').className      = 'timer-display idle';
+  g('battle-hint').innerHTML       = 'segure <kbd>espaço</kbd> para iniciar &nbsp;·&nbsp; ou aperte <kbd>espaço</kbd> para inspecionar';
   setBattleStatus('');
 
-  // Placar compacto (novos IDs ban-*)
-  g('ban-me-avatar').textContent  = myProfile.avatar;
-  g('ban-me-name').textContent    = myProfile.nickname;
-  g('ban-me-score').textContent   = '—';
-  g('ban-me-wins').textContent    = myWins + 'W';
-  g('ban-me-score').className     = 'ban-score';
-  g('ban-me').className           = 'ban-player';
+  // Mostra scramble, esconde msg aguardo
+  g('bv3-scramble-card').style.display = 'block';
+  g('bv3-waiting-msg').style.display   = 'none';
 
-  const oppNick   = (battleIsHost ? battleRoom.guest_nickname : battleRoom.host_nickname) || 'Adversário';
-  const oppAvatar = (battleIsHost ? battleRoom.guest_avatar   : battleRoom.host_avatar)   || '❓';
-  g('ban-opp-avatar').textContent = oppAvatar;
-  g('ban-opp-name').textContent   = oppNick;
-  g('ban-opp-score').textContent  = '—';
-  g('ban-opp-wins').textContent   = oppWins + 'W';
-  g('ban-opp-score').className    = 'ban-score';
-  g('ban-opp').className          = 'ban-player ban-player-opp';
+  // Sai do foco
+  bv3SetFocus(false);
 
-  // Prévia do scramble (reutiliza a função do modo normal)
-  const netEl = g('ban-scramble-net');
-  if (netEl && typeof applyScramble !== 'undefined') {
-    try {
-      const state = applyScramble(scramble);
-      netEl.innerHTML = renderScrambleNet(state);
-    } catch(e) { netEl.innerHTML = ''; }
+  // Info jogadores
+  g('bv3-me-avatar').textContent  = myProfile.avatar;
+  g('bv3-me-name').textContent    = myProfile.nickname;
+  g('bv3-me-time').textContent    = '—';
+  g('bv3-me-wins').textContent    = myWins + 'W';
+  g('bv3-opp-avatar').textContent = (battleIsHost ? battleRoom.guest_avatar : battleRoom.host_avatar) || '❓';
+  g('bv3-opp-name').textContent   = (battleIsHost ? battleRoom.guest_nickname : battleRoom.host_nickname) || 'Adversário';
+  g('bv3-opp-time').textContent   = '—';
+  g('bv3-opp-wins').textContent   = oppWins + 'W';
+
+  // Bordas neutras
+  bv3SetPanelBorder('me', 'neutral');
+  bv3SetPanelBorder('opp', 'neutral');
+
+  // Prévia do scramble
+  const netEl = g('bv3-scramble-net');
+  if (netEl) {
+    try { netEl.innerHTML = renderScrambleNet(applyScramble(scramble)); } catch(e) { netEl.innerHTML = ''; }
   }
 
-  // Histórico
-  updateBanHistory();
+  // Atualiza histórico
+  bv3RenderHistory();
 }
 
-function updateBattleScore(myMs, oppMs) {
-  const g = id => document.getElementById(id);
-  if (myMs  !== null) { g('ban-me-score').textContent  = fmtTime(myMs);  g('ban-me-score').className  = 'ban-score done'; }
-  if (oppMs !== null) { g('ban-opp-score').textContent = fmtTime(oppMs); g('ban-opp-score').className = 'ban-score done'; }
+// ── Helpers visuais ───────────────────────────
+function bv3SetFocus(on) {
+  const arena = document.getElementById('battle-arena');
+  if (!arena) return;
+  const left  = arena.querySelector('.bv3-me');
+  const right = arena.querySelector('.bv3-opp');
+  const scr   = document.getElementById('bv3-scramble-card');
+  if (left)  left.style.opacity  = on ? '0' : '1';
+  if (left)  left.style.pointerEvents = on ? 'none' : '';
+  if (right) right.style.opacity = on ? '0' : '1';
+  if (right) right.style.pointerEvents = on ? 'none' : '';
+  if (scr && !on) {
+    // Só mostra scramble se não estiver no estado "aguardando"
+    if (battleTimerState === 'idle' && !myRoundDone) {
+      scr.style.opacity = '1';
+    }
+  } else if (scr) {
+    scr.style.opacity = on ? '0' : '1';
+  }
+}
+
+function bv3SetPanelBorder(side, state) {
+  const el = document.getElementById(side === 'me' ? 'bv3-me-panel' : 'bv3-opp-panel');
+  if (!el) return;
+  el.classList.remove('bv3-win', 'bv3-loss', 'bv3-neutral');
+  el.classList.add('bv3-' + state);
+}
+
+function bv3SetMyTime(ms, isLive) {
+  const el = document.getElementById('bv3-me-time');
+  if (!el) return;
+  el.textContent = ms > 0 ? fmtTime(ms) : '—';
+  el.classList.toggle('bv3-time-live', isLive);
+  el.classList.toggle('bv3-time-done', !isLive && ms > 0);
+}
+
+function bv3SetOppTime(ms, isLive) {
+  const el = document.getElementById('bv3-opp-time');
+  if (!el) return;
+  el.textContent = ms > 0 ? fmtTime(ms) : '—';
+  el.classList.toggle('bv3-time-live', isLive);
+  el.classList.toggle('bv3-time-done', !isLive && ms > 0);
+}
+
+function bv3RenderHistory() {
+  const meEl  = document.getElementById('bv3-me-history');
+  const oppEl = document.getElementById('bv3-opp-history');
+  if (!meEl || !oppEl) return;
+
+  if (!battleRoundHistory.length) {
+    meEl.innerHTML  = '<div class="bv3-history-empty">Nenhum round ainda</div>';
+    oppEl.innerHTML = '<div class="bv3-history-empty">Nenhum round ainda</div>';
+    return;
+  }
+
+  const rows = battleRoundHistory.slice().reverse();
+  meEl.innerHTML = rows.map(r => `
+    <div class="bv3-hist-row ${r.won ? 'won' : 'lost'}">
+      <span class="bv3-hist-round">T${r.round}</span>
+      <span class="bv3-hist-time">${fmtTime(r.myMs)}</span>
+      <span class="bv3-hist-result">${r.won ? '🏆 Vitória' : '💔 Derrota'}</span>
+    </div>`).join('');
+
+  oppEl.innerHTML = rows.map(r => `
+    <div class="bv3-hist-row ${!r.won ? 'won' : 'lost'}">
+      <span class="bv3-hist-round">T${r.round}</span>
+      <span class="bv3-hist-time">${fmtTime(r.oppMs)}</span>
+      <span class="bv3-hist-result">${!r.won ? '🏆 Vitória' : '💔 Derrota'}</span>
+    </div>`).join('');
 }
 
 function resolveRound(myMs, oppMs, room) {
   clearInterval(battlePollId);
+  clearInterval(battleRealtimePollId);
   const iWon = myMs < oppMs;
   if (iWon) myWins++; else oppWins++;
 
-  const g = id => document.getElementById(id);
-  g('ban-me-wins').textContent  = myWins  + 'W';
-  g('ban-opp-wins').textContent = oppWins + 'W';
-  g('ban-me').className  = 'ban-player'           + (iWon  ? ' winning' : ' losing');
-  g('ban-opp').className = 'ban-player ban-player-opp' + (!iWon ? ' winning' : ' losing');
-
-  // Salva no histórico local
   battleRoundHistory.push({ round: room.round || 1, myMs, oppMs, won: iWon });
-  updateBanHistory();
+  bv3RenderHistory();
+  bv3SetPanelBorder('me',  iWon ? 'win' : 'loss');
+  bv3SetPanelBorder('opp', iWon ? 'loss' : 'win');
+
+  document.getElementById('bv3-me-wins').textContent  = myWins  + 'W';
+  document.getElementById('bv3-opp-wins').textContent = oppWins + 'W';
 
   if (iWon) setBattleStatus(`🏆 Você venceu o round! ${fmtTime(myMs)} vs ${fmtTime(oppMs)}`, 'winner');
   else       setBattleStatus(`😤 Adversário venceu. ${fmtTime(oppMs)} vs ${fmtTime(myMs)}`, 'loser');
 
-  // Próximo round em 4s (só o host avança o round)
+  // Mostra scramble novamente e mensagem do próximo round
+  document.getElementById('bv3-scramble-card').style.display = 'none';
+  document.getElementById('bv3-waiting-msg').style.display   = 'flex';
+  document.getElementById('bv3-waiting-msg').querySelector('.bv3-waiting-text').textContent = 'Próximo round em instantes...';
+
   setTimeout(async () => {
     const newRound = (room.round || 1) + 1;
     const newScramble = genScramble();
@@ -2303,84 +2380,179 @@ function resolveRound(myMs, oppMs, room) {
 
 function setBattleStatus(msg, cls) {
   const el = document.getElementById('battle-status');
+  if (!el) return;
   el.textContent = msg;
   el.className = 'battle-status' + (cls ? ' ' + cls : '');
 }
 
-// ── Timer da batalha ─────────────────────────
+// ── Timer da batalha com inspeção ─────────────
 function battlePressDown() {
-  const bt = document.getElementById('battle-timer');
-  const bh = document.getElementById('battle-hint');
+  // RUNNING → para
+  if (battleTimerState === 'running') return; // para no pressUp
 
-  // RODANDO → para o timer (igual ao modo normal: soltar para parar)
-  if (battleTimerState === 'running') return; // não para no pressDown, só no pressUp
+  // DONE → ignora
+  if (battleTimerState === 'done') return;
 
-  // IDLE → inicia sequência hold
-  if (battleTimerState === 'idle') {
-    battleHoldReady  = false;
-    battleTimerState = 'holding';
-    bt.className = 'timer-display holding';
-    bh.innerHTML = 'continue segurando...';
+  // INSPECTION → começa hold para iniciar
+  if (battleTimerState === 'inspection') {
+    battleHoldReady   = false;
+    battleCameFromInsp = true;
+    battleTimerState  = 'holding';
+    document.getElementById('battle-timer').className = 'timer-display holding';
+    document.getElementById('battle-hint').innerHTML  = 'continue segurando...';
     battleHoldTimer = setTimeout(() => {
-      battleHoldReady  = true;
-      bt.className = 'timer-display ready';
-      bh.innerHTML = 'pode soltar!';
+      battleHoldReady = true;
+      document.getElementById('battle-timer').className = 'timer-display ready';
+      document.getElementById('battle-hint').innerHTML  = 'pode soltar!';
+    }, cfg.holdTime || 300);
+    return;
+  }
+
+  // IDLE → hold
+  if (battleTimerState === 'idle') {
+    battleHoldReady    = false;
+    battleCameFromInsp = false;
+    battleTimerState   = 'holding';
+    document.getElementById('battle-timer').className = 'timer-display holding';
+    document.getElementById('battle-hint').innerHTML  = 'continue segurando...';
+    bv3SetFocus(true);
+    battleHoldTimer = setTimeout(() => {
+      battleHoldReady = true;
+      document.getElementById('battle-timer').className = 'timer-display ready';
+      document.getElementById('battle-hint').innerHTML  = 'pode soltar!';
     }, cfg.holdTime || 300);
   }
 }
 
 function battlePressUp() {
-  const bt = document.getElementById('battle-timer');
-  const bh = document.getElementById('battle-hint');
   clearTimeout(battleHoldTimer);
 
-  if (battleTimerState === 'holding') {
-    if (battleHoldReady) {
-      // Inicia corrida
-      battleTimerState = 'running';
-      battleStart = Date.now();
-      bt.className = 'timer-display running';
-      bh.innerHTML = 'solte <kbd>espaço</kbd> para parar';
-      const tick = () => {
-        if (battleTimerState !== 'running') return;
-        bt.textContent = fmtTime(Date.now() - battleStart);
-        battleRafId = requestAnimationFrame(tick);
-      };
-      battleRafId = requestAnimationFrame(tick);
-    } else {
-      battleTimerState = 'idle';
-      bt.className = 'timer-display idle';
-      bh.innerHTML = 'segure <kbd>espaço</kbd> para iniciar';
-    }
+  // Para o timer
+  if (battleTimerState === 'running') {
+    cancelAnimationFrame(battleRafId);
+    clearInterval(battleInspTimer);
+    const t = Date.now() - battleStart;
+    battleTimerState = 'done';
+    myRoundTime = t;
+    document.getElementById('battle-timer').textContent = fmtTime(t);
+    document.getElementById('battle-timer').className   = 'timer-display idle';
+    document.getElementById('battle-hint').innerHTML    = '⏳ Aguardando adversário...';
+    bv3SetFocus(false);
+    bv3SetMyTime(t, false);
+
+    // Scramble → mensagem de aguardo
+    document.getElementById('bv3-scramble-card').style.display = 'none';
+    document.getElementById('bv3-waiting-msg').style.display   = 'flex';
+    document.getElementById('bv3-waiting-msg').querySelector('.bv3-waiting-text').textContent = 'Aguardando finalizar round...';
+
+    setBattleStatus('✅ Tempo enviado. Aguardando adversário...');
+    sbInsertResult(battleRoom.id, MY_ID, battleRoom.round, t);
+
+    // Inicia poll em tempo real para ver adversário
+    battleRealtimePollId = setInterval(pollRealtime, 1000);
     return;
   }
 
-  if (battleTimerState === 'running') {
-    // Para o timer
-    cancelAnimationFrame(battleRafId);
-    const t = Date.now() - battleStart;
-    battleTimerState = 'idle';
-    myRoundTime      = t;
-    bt.textContent   = fmtTime(t);
-    bt.className     = 'timer-display idle';
-    bh.innerHTML     = '⏳ Aguardando adversário...';
-    updateBattleScore(t, null);
-    setBattleStatus('✅ Tempo enviado. Aguardando adversário...');
-    sbInsertResult(battleRoom.id, MY_ID, battleRoom.round, t);
+  if (battleTimerState === 'holding') {
+    if (battleHoldReady) {
+      // Inicia diretamente ou começa inspeção
+      if (battleCameFromInsp || cfg.inspection === false) {
+        bv3StartRunning();
+      } else {
+        bv3SetFocus(false);
+        bv3StartInspection();
+      }
+    } else {
+      battleTimerState = 'idle';
+      bv3SetFocus(false);
+      document.getElementById('battle-timer').className = 'timer-display idle';
+      document.getElementById('battle-hint').innerHTML  = 'segure <kbd>espaço</kbd> para iniciar &nbsp;·&nbsp; ou aperte <kbd>espaço</kbd> para inspecionar';
+    }
   }
 }
+
+function bv3StartInspection() {
+  battleInspLeft = 0;
+  battleTimerState = 'inspection';
+  const bt = document.getElementById('battle-timer');
+  const bh = document.getElementById('battle-hint');
+  bt.textContent = '0';
+  bt.className   = 'timer-display inspection';
+  bt.style.color = '';
+  bh.innerHTML   = 'aperte <kbd>espaço</kbd> para iniciar a solve';
+
+  battleInspTimer = setInterval(() => {
+    battleInspLeft++;
+    bt.textContent = battleInspLeft;
+    if (battleInspLeft >= 15) {
+      bt.style.color     = 'var(--danger)';
+      bt.style.animation = 'inspFlash .4s ease infinite';
+    } else if (battleInspLeft >= 12) {
+      bt.style.color     = '#f5c800';
+      bt.style.animation = 'inspPulse .6s ease infinite';
+    } else {
+      bt.style.color     = 'var(--warning)';
+      bt.style.animation = '';
+    }
+    if (battleInspLeft === 8)  playDoubleBip();
+    if (battleInspLeft === 12) playTripleBip();
+    if (battleInspLeft >= 15) {
+      clearInterval(battleInspTimer);
+      bt.style.color = ''; bt.style.animation = '';
+      if (cfg.autoDnf !== false) {
+        // DNF — registra tempo 0 e aguarda
+        battleTimerState = 'done';
+        bt.innerHTML = '<span style="color:var(--danger)">DNF</span>';
+        bh.textContent = '⏳ Aguardando adversário...';
+        bv3SetFocus(false);
+        document.getElementById('bv3-scramble-card').style.display = 'none';
+        document.getElementById('bv3-waiting-msg').style.display   = 'flex';
+        sbInsertResult(battleRoom.id, MY_ID, battleRoom.round, 999999999);
+        setBattleStatus('DNF registrado. Aguardando adversário...');
+        battleRealtimePollId = setInterval(pollRealtime, 1000);
+      } else {
+        bv3StartRunning();
+      }
+    }
+  }, 1000);
+}
+
+function bv3StartRunning() {
+  clearInterval(battleInspTimer);
+  battleTimerState = 'running';
+  battleStart = Date.now();
+  bv3SetFocus(true);
+  const bt = document.getElementById('battle-timer');
+  const bh = document.getElementById('battle-hint');
+  bt.style.color = ''; bt.style.animation = '';
+  bt.textContent = '0.00';
+  bt.className   = 'timer-display running';
+  bh.innerHTML   = 'solte <kbd>espaço</kbd> para parar';
+
+  // Esconde scramble imediatamente
+  document.getElementById('bv3-scramble-card').style.display = 'none';
+  document.getElementById('bv3-waiting-msg').style.display   = 'none';
+
+  const tick = () => {
+    if (battleTimerState !== 'running') return;
+    bt.textContent = fmtTime(Date.now() - battleStart);
+    battleRafId = requestAnimationFrame(tick);
+  };
+  battleRafId = requestAnimationFrame(tick);
+}
+
+// ── Touch mobile ──────────────────────────────
+function battleTouchDown(e) { e.preventDefault(); battlePressDown(); }
+function battleTouchUp(e)   { e.preventDefault(); battlePressUp(); }
 
 // ── Navegação da batalha ─────────────────────
 function showBattleLobby() {
   battleRoundHistory = [];
+  clearInterval(battleInspTimer);
+  bv3SetFocus(false);
   document.getElementById('battle-lobby').style.display   = 'flex';
   document.getElementById('battle-waiting').style.display = 'none';
   document.getElementById('battle-arena').style.display   = 'none';
-  document.getElementById('battle-topbar-round').style.display = 'none';
-  // Atualiza contagem online no lobby
-  const onlineCountEl = document.getElementById('bln-online-count');
-  const mainCount = document.getElementById('online-count');
-  if (onlineCountEl && mainCount) onlineCountEl.textContent = mainCount.textContent;
 }
 
 function showBattleWaiting(code) {
@@ -2393,13 +2565,17 @@ function showBattleWaiting(code) {
 async function cancelRoom() {
   if (battleRoom) await sbDelete('battle_rooms', `id=eq.${battleRoom.id}`);
   clearInterval(battlePollId);
+  clearInterval(battleRealtimePollId);
   battleRoom = null;
   showBattleLobby();
 }
 
 async function leaveBattle() {
   clearInterval(battlePollId);
+  clearInterval(battleRealtimePollId);
+  clearInterval(battleInspTimer);
   cancelAnimationFrame(battleRafId);
+  bv3SetFocus(false);
   if (battleRoom && battleRoom.status === 'active') {
     await fetch(`${SUPABASE_URL}/rest/v1/battle_rooms?id=eq.${battleRoom.id}`, {
       method: 'PATCH', headers: sbHeaders, body: JSON.stringify({ status: 'abandoned' })
@@ -2411,38 +2587,25 @@ async function leaveBattle() {
   showPage('timer');
 }
 
-// Teclado na batalha
+// ── Teclado na batalha ────────────────────────
 function battleKeyDown(e) {
   if (e.code === 'Space' && !e.repeat) { e.preventDefault(); battlePressDown(); }
-  if (e.code === 'Escape') { cancelAnimationFrame(battleRafId); battleTimerState = 'idle'; document.getElementById('battle-timer').className = 'timer-display idle'; document.getElementById('battle-timer').textContent = '0.00'; document.getElementById('battle-hint').innerHTML = 'segure <kbd>espaço</kbd> para iniciar'; }
+  if (e.code === 'Escape') {
+    clearInterval(battleInspTimer);
+    cancelAnimationFrame(battleRafId);
+    battleTimerState = 'idle';
+    bv3SetFocus(false);
+    document.getElementById('battle-timer').className = 'timer-display idle';
+    document.getElementById('battle-timer').textContent = '0.00';
+    document.getElementById('battle-timer').style.color = '';
+    document.getElementById('battle-timer').style.animation = '';
+    document.getElementById('battle-hint').innerHTML = 'segure <kbd>espaço</kbd> para iniciar &nbsp;·&nbsp; ou aperte <kbd>espaço</kbd> para inspecionar';
+    document.getElementById('bv3-scramble-card').style.display = 'block';
+    document.getElementById('bv3-waiting-msg').style.display   = 'none';
+  }
 }
 function battleKeyUp(e) {
   if (e.code === 'Space') { e.preventDefault(); battlePressUp(); }
-}
-function battleTouchDown(e) { e.preventDefault(); battlePressDown(); }
-function battleTouchUp(e)   { e.preventDefault(); battlePressUp(); }
-
-function updateBanHistory() {
-  const card = document.getElementById('ban-history-card');
-  const list = document.getElementById('ban-history-list');
-  if (!card || !list) return;
-  if (!battleRoundHistory.length) { card.style.display = 'none'; return; }
-  card.style.display = 'block';
-  // Mostra os últimos 5 rounds
-  const recent = battleRoundHistory.slice(-5);
-  list.innerHTML = recent.slice().reverse().map(r => `
-    <div class="ban-history-row ${r.won ? 'won' : 'lost'}">
-      <span class="ban-hr-round">R${r.round}</span>
-      <span class="ban-hr-me">${fmtTime(r.myMs)}</span>
-      <span class="ban-hr-opp">${fmtTime(r.oppMs)}</span>
-      <span class="ban-hr-result ${r.won ? 'w' : 'l'}">${r.won ? '🏆 Vitória' : '💔 Derrota'}</span>
-    </div>`).join('');
-}
-
-function copyBattleCode() {
-  const code = document.getElementById('battle-code-display').textContent;
-  if (navigator.clipboard) navigator.clipboard.writeText(code);
-  showToast('Código copiado: ' + code);
 }
 
 // ═══════════════════════════════════════════════
@@ -2658,102 +2821,6 @@ function toggleSettings() {
   const isOpen = panel.classList.toggle('open');
   if (isOpen) loadCfgUI();
 }
-
-// ═══════════════════════════════════════════════
-//  MENU DE DISPOSITIVOS
-// ═══════════════════════════════════════════════
-function toggleDeviceMenu() {
-  const menu = document.getElementById('device-connect-menu');
-  if (!menu) return;
-  const isOpen = menu.style.display === 'block';
-  menu.style.display = isOpen ? 'none' : 'block';
-  if (!isOpen) {
-    setTimeout(() => {
-      document.addEventListener('click', closeDeviceMenuOnOutside, { once: true });
-    }, 0);
-  }
-}
-
-function closeDeviceMenu() {
-  const menu = document.getElementById('device-connect-menu');
-  if (menu) menu.style.display = 'none';
-}
-
-function closeDeviceMenuOnOutside(e) {
-  const wrapper = document.getElementById('device-connect-wrapper');
-  if (wrapper && !wrapper.contains(e.target)) closeDeviceMenu();
-}
-
-function updateDeviceButtonLabel() {
-  const label = document.getElementById('btn-device-label');
-  const dot   = document.getElementById('cube-bt-dot');
-  if (!label) return;
-  const smartOk = typeof cubeConnected !== 'undefined' && cubeConnected;
-  const ganOk   = typeof ganConnected  !== 'undefined' && ganConnected;
-  if (smartOk && ganOk) {
-    label.textContent = '🟢 2 dispositivos';
-    if (dot) dot.style.background = '#4adb8a';
-  } else if (smartOk) {
-    label.textContent = '🟢 Smart Cube';
-    if (dot) dot.style.background = '#4adb8a';
-  } else if (ganOk) {
-    label.textContent = '🟢 GAN Timer';
-    if (dot) dot.style.background = '#4adb8a';
-  } else {
-    label.textContent = '🔌 Dispositivo';
-    if (dot) dot.style.background = 'var(--muted)';
-  }
-}
-
-function updateDisconnectBtn() {
-  const btn = document.getElementById('btn-disconnect-all');
-  if (!btn) return;
-  const anyConnected = (typeof ganConnected !== 'undefined' && ganConnected) ||
-                       (typeof cubeConnected !== 'undefined' && cubeConnected);
-  btn.style.display = anyConnected ? 'flex' : 'none';
-}
-
-function disconnectAllDevices() {
-  if (typeof disconnectSmartCube !== 'undefined' && typeof cubeConnected !== 'undefined' && cubeConnected) {
-    disconnectSmartCube();
-  }
-  if (typeof disconnectGanTimer !== 'undefined' && typeof ganConnected !== 'undefined' && ganConnected) {
-    disconnectGanTimer();
-  }
-  updateDeviceButtonLabel();
-  updateDisconnectBtn();
-}
-
-// Expõe utilitários para dispositivos externos
-window.fmtTime   = fmtTime;
-window.showToast = showToast;
-window.newScramble = newScramble;
-window.saveTime  = saveTime;
-window.showTimerWithDelta = function(t) {
-  const entries = currentTimes();
-  const validPrev = entries.filter(e => !e.dnf && typeof e.ms === 'number');
-  if (validPrev.length > 0) {
-    const prev  = validPrev[validPrev.length - 1].ms;
-    const delta = t - prev;
-    const sign  = delta < 0 ? '' : '+';
-    const color = delta < 0 ? 'var(--success)' : 'var(--danger)';
-    const deltaStr = sign + (delta / 1000).toFixed(2).replace('.', ',');
-    elTimer.innerHTML = fmtTime(t) +
-      ` <span style="font-size:0.38em;color:${color};font-family:var(--mono);font-weight:400;vertical-align:middle;opacity:0.9;">(${deltaStr})</span>`;
-  } else {
-    elTimer.textContent = fmtTime(t);
-  }
-};
-window.STATE = STATE;
-window.elTimer = elTimer;
-Object.defineProperty(window, 'timerState', { get: () => timerState, set: v => { timerState = v; } });
-
-// Stubs seguros caso gantimer.js não carregue
-if (typeof connectGanTimer === 'undefined') {
-  window.connectGanTimer    = () => showToast('gantimer.js não encontrado na pasta js/.');
-  window.disconnectGanTimer = () => {};
-}
-
 
 newScramble();
 applyDedicatedMobileLayout();
