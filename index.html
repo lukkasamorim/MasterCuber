@@ -15,13 +15,149 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/styles.css" />
+  <style>
+    /* ═══════════════════════════════
+       BATALHA v3 — Layout 3 colunas
+    ═══════════════════════════════ */
+    .bv3-layout {
+      display: grid;
+      grid-template-columns: 260px 1fr 260px;
+      height: calc(100vh - 53px);
+      background: var(--bg);
+    }
+
+    /* ── Colunas laterais ── */
+    .bv3-side {
+      display: flex; flex-direction: column;
+      border: 2px solid var(--border2);
+      border-radius: var(--rl);
+      margin: 12px 8px 12px 12px;
+      background: var(--surface);
+      overflow: hidden;
+      transition: border-color .3s, box-shadow .3s;
+    }
+    .bv3-opp { margin: 12px 12px 12px 8px; }
+
+    .bv3-side.bv3-win  { border-color: #4adb8a; box-shadow: 0 0 20px rgba(74,219,138,.2); }
+    .bv3-side.bv3-loss { border-color: #f87171; box-shadow: 0 0 20px rgba(248,113,113,.15); }
+
+    /* Header do jogador */
+    .bv3-player-header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 16px 14px 12px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .bv3-opp-header { flex-direction: row-reverse; }
+
+    .bv3-avatar { font-size: 32px; line-height: 1; flex-shrink: 0; }
+    .bv3-player-info { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+    .bv3-opp-info { align-items: flex-end; text-align: right; }
+    .bv3-player-name { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .bv3-player-time {
+      font-family: var(--mono); font-size: 26px; font-weight: 700;
+      color: var(--accent); line-height: 1;
+    }
+    .bv3-player-time.bv3-time-done { color: var(--success); }
+    .bv3-player-wins { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+    /* Histórico de rounds */
+    .bv3-history-list {
+      flex: 1; overflow-y: auto; padding: 8px 0;
+      scrollbar-width: thin; scrollbar-color: var(--border2) transparent;
+    }
+    .bv3-history-empty { font-size: 12px; color: var(--muted); text-align: center; padding: 16px; }
+
+    .bv3-hist-row {
+      display: grid; grid-template-columns: 28px 1fr auto;
+      align-items: center; gap: 8px;
+      padding: 6px 14px; font-family: var(--mono); font-size: 12px;
+      border-left: 2px solid transparent;
+      transition: background .1s;
+    }
+    .bv3-hist-row:hover { background: var(--surface2); }
+    .bv3-hist-row.won  { border-left-color: #4adb8a; }
+    .bv3-hist-row.lost { border-left-color: #f87171; }
+    .bv3-hist-round  { color: var(--muted); font-size: 11px; }
+    .bv3-hist-time   { font-weight: 700; color: var(--text); }
+    .bv3-hist-result { font-size: 11px; }
+    .bv3-hist-row.won  .bv3-hist-result { color: #4adb8a; }
+    .bv3-hist-row.lost .bv3-hist-result { color: #f87171; }
+
+    /* Prévia do scramble (lado direito) */
+    .bv3-preview-card {
+      border-top: 1px solid var(--border);
+      padding: 10px 12px;
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      flex-shrink: 0;
+    }
+    .bv3-preview-label {
+      font-family: var(--mono); font-size: 9px; letter-spacing: 1.5px;
+      color: var(--muted); align-self: flex-start;
+    }
+
+    /* ── Centro ── */
+    .bv3-center {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 16px; padding: 16px 20px;
+      position: relative;
+    }
+
+    .bv3-scramble-card {
+      width: 100%; background: var(--surface);
+      border: 1px solid var(--border2); border-radius: var(--rl);
+      padding: 14px 18px;
+    }
+    .bv3-scramble-label {
+      font-family: var(--mono); font-size: 9px; letter-spacing: 1.5px;
+      color: var(--muted); margin-bottom: 8px;
+    }
+
+    /* Mensagem de aguardo */
+    .bv3-waiting-msg {
+      width: 100%; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 8px;
+      background: var(--surface); border: 1px solid var(--border2);
+      border-radius: var(--rl); padding: 20px;
+    }
+    .bv3-waiting-icon { font-size: 28px; }
+    .bv3-waiting-text { font-family: var(--mono); font-size: 13px; color: var(--muted); text-align: center; }
+
+    .bv3-vs {
+      font-family: var(--mono); font-size: 22px; font-weight: 700;
+      color: var(--muted); letter-spacing: 2px;
+    }
+
+    .bv3-timer-area {
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+      width: 100%; background: var(--surface);
+      border: 1px solid var(--border2); border-radius: var(--rl);
+      padding: 28px 20px; user-select: none; cursor: default;
+    }
+
+    /* Modo foco na batalha */
+    .bv3-side { transition: opacity .25s, border-color .3s, box-shadow .3s; }
+
+    /* Mobile */
+    @media (max-width: 900px) {
+      .bv3-layout {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto;
+        height: auto; overflow-y: auto;
+      }
+      .bv3-side { margin: 8px 12px 0; }
+      .bv3-opp  { margin: 0 12px 8px; }
+      .bv3-history-list { max-height: 180px; }
+    }
+  </style>
 </head>
 <body>
 
 <header class="header">
   <div class="header-left">
     <span class="logo">CubeTimer</span>
-    <span class="vbadge">v0.9.2</span>
+    <span class="vbadge">v0.7.0</span>
   </div>
   <div class="header-right">
     <button class="btn btn-ghost btn-sm" id="btn-show-preview" onclick="toggleScramblePreview()" title="Mostrar prévia do scramble" style="display:none">⬛ Prévia</button>
@@ -30,36 +166,6 @@
       <span class="online-dot"></span>
       <span id="online-count">0</span> online
     </button>
-    <div class="device-connect-wrapper" id="device-connect-wrapper">
-      <button class="btn btn-ghost btn-sm device-connect-main" id="btn-device-main" onclick="toggleDeviceMenu()" style="display:flex;align-items:center;gap:6px;">
-        <span id="cube-bt-dot" style="width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block;"></span>
-        <span id="btn-device-label">🔌 Dispositivo</span>
-      </button>
-      <div class="device-connect-menu" id="device-connect-menu" style="display:none;">
-        <div class="device-menu-title">Conectar dispositivo</div>
-        <button class="device-menu-item" onclick="connectSmartCube(); closeDeviceMenu()">
-          <span class="device-menu-icon">🧩</span>
-          <div>
-            <div class="device-menu-name">Smart Cube</div>
-            <div class="device-menu-sub">QiYi Tornado V3 via Bluetooth</div>
-          </div>
-          <span class="device-menu-status" id="smartcube-status-dot" style="width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block;"></span>
-        </button>
-        <button class="device-menu-item" onclick="connectGanTimer(); closeDeviceMenu()">
-          <span class="device-menu-icon">⏱</span>
-          <div>
-            <div class="device-menu-name">Timer Físico GAN</div>
-            <div class="device-menu-sub">GAN Timer via USB/Serial</div>
-          </div>
-          <span class="device-menu-status" id="gantimer-status-dot" style="width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block;"></span>
-        </button>
-        <div class="device-menu-divider"></div>
-        <button class="device-menu-item device-menu-disconnect" id="btn-disconnect-all" onclick="disconnectAllDevices(); closeDeviceMenu()" style="display:none;">
-          <span class="device-menu-icon">🔌</span>
-          <div><div class="device-menu-name">Desconectar tudo</div></div>
-        </button>
-      </div>
-    </div>
     <button class="btn btn-ghost btn-sm" id="settings-btn" onclick="toggleSettings()" title="Configurações">⚙️</button>
   </div>
 </header>
@@ -126,31 +232,7 @@
       <div class="timer-area">
         <div class="timer-display idle" id="timer">0.00</div>
         <div class="timer-hint" id="hint">segure <kbd>espaço</kbd> para iniciar &nbsp;·&nbsp; ou aperte <kbd>espaço</kbd> para inspecionar</div>
-            <!-- Painel Smart Cube -->
-      <!-- Painel Smart Cube -->
-      <div id="cube-panel" style="display:none;flex-direction:column;align-items:center;gap:8px;margin-top:16px;">
-        <div style="font-family:var(--mono);font-size:10px;letter-spacing:1.5px;color:var(--muted);">SMART CUBE</div>
-        <div id="cube-move-display" style="font-family:var(--mono);font-size:48px;font-weight:700;color:var(--accent);opacity:0.3;transition:opacity .1s;min-height:60px;line-height:1;">—</div>
-        <div id="cube-move-history" style="font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:2px;min-height:20px;"></div>
       </div>
-
-      <!-- Painel GAN Timer físico -->
-      <div id="gan-timer-panel" style="display:none;flex-direction:column;align-items:center;gap:6px;margin-top:12px;padding:12px 16px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);width:100%;">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span id="gan-timer-dot-panel" style="width:8px;height:8px;border-radius:50%;background:#4adb8a;display:inline-block;"></span>
-          <span style="font-family:var(--mono);font-size:11px;letter-spacing:1px;color:var(--muted);">GAN TIMER</span>
-          <span id="gan-timer-status-text" style="font-family:var(--mono);font-size:11px;color:var(--accent);">Conectado</span>
-        </div>
-        <p style="font-size:11px;color:var(--muted);text-align:center;line-height:1.5;">Use o timer físico normalmente.<br>O tempo será registrado automaticamente aqui.</p>
-      </div>
-
-      <!-- Painel GAN Timer -->
-      <div id="gan-timer-panel" style="display:none;flex-direction:column;align-items:center;gap:6px;margin-top:16px;">
-        <div style="font-family:var(--mono);font-size:10px;letter-spacing:1.5px;color:var(--muted);">GAN TIMER</div>
-        <div id="gan-timer-display" style="font-family:var(--mono);font-size:36px;font-weight:700;color:var(--accent);min-height:48px;line-height:1;">—</div>
-        <div id="gan-timer-state" style="font-size:11px;color:var(--muted);font-family:var(--mono);">aguardando...</div>
-      </div>
-    </div>
     </div>
   </section>
 
@@ -276,7 +358,7 @@
 <div id="page-login" class="login-page" style="display:none">
   <div class="login-inner">
     <div class="login-hero">
-      <div class="login-hero-badge">v1.9.0</div>
+      <div class="login-hero-badge">v1.7.0</div>
       <div class="login-hero-icon">🧊</div>
       <div class="login-hero-title">CubeTimer</div>
       <div class="login-hero-sub">Escolha um modo para começar.</div>
@@ -336,120 +418,97 @@
   <div class="battle-topbar">
     <button class="btn btn-ghost btn-sm" onclick="leaveBattle()">← Voltar</button>
     <div class="battle-topbar-title">⚔️ Modo Batalha</div>
-    <div id="battle-topbar-round" style="font-family:var(--mono);font-size:12px;color:var(--muted);display:none">Round <span id="battle-round-top">1</span></div>
+    <div style="width:80px"></div>
   </div>
 
-  <!-- Lobby redesenhado -->
+  <!-- Lobby -->
   <div id="battle-lobby" class="battle-section">
-    <div class="battle-lobby-new">
-
-      <!-- Header -->
-      <div class="bln-header">
-        <div class="bln-icon">⚔️</div>
-        <div>
-          <div class="bln-title">Modo Batalha</div>
-          <div class="bln-sub">Dispute rounds em tempo real com um amigo</div>
-        </div>
+    <div class="battle-lobby-inner">
+      <div class="battle-hero-icon">⚔️</div>
+      <h2 class="battle-hero-title">Modo Batalha</h2>
+      <p class="battle-hero-sub">Crie uma sala, compartilhe o código com seu amigo e disputem quem faz o melhor tempo!</p>
+      <button class="btn-complete" style="margin-top:8px" onclick="createRoom()">Criar Sala</button>
+      <div class="battle-divider"><span>ou</span></div>
+      <div class="battle-join-row">
+        <input class="modal-input" id="join-code" placeholder="Código da sala..." maxlength="6" style="text-transform:uppercase;letter-spacing:3px;text-align:center;font-family:var(--mono)" oninput="this.value=this.value.toUpperCase()" />
+        <button class="btn-complete" onclick="joinRoom()">Entrar</button>
       </div>
+    </div>
+  </div>
 
-      <!-- Cards de ação -->
-      <div class="bln-cards">
-        <div class="bln-card bln-card-create" onclick="createRoom()">
-          <div class="bln-card-icon">🏠</div>
-          <div class="bln-card-title">Criar Sala</div>
-          <div class="bln-card-desc">Gere um código e convide seu amigo</div>
-          <button class="bln-card-btn">Criar →</button>
-        </div>
-        <div class="bln-card-divider">ou</div>
-        <div class="bln-card bln-card-join">
-          <div class="bln-card-icon">🔑</div>
-          <div class="bln-card-title">Entrar em Sala</div>
-          <div class="bln-card-desc">Digite o código de 6 letras</div>
-          <div class="bln-join-input-row">
-            <input class="bln-code-input" id="join-code" placeholder="ABCDEF" maxlength="6"
-              style="text-transform:uppercase;letter-spacing:4px;text-align:center;font-family:var(--mono)"
-              oninput="this.value=this.value.toUpperCase()"
-              onkeydown="if(event.key==='Enter') joinRoom()" />
-            <button class="bln-card-btn" onclick="joinRoom()">Entrar →</button>
+  <!-- Sala aguardando -->
+  <div id="battle-waiting" class="battle-section" style="display:none">
+    <div class="battle-lobby-inner">
+      <div class="battle-hero-icon">⏳</div>
+      <h2 class="battle-hero-title">Aguardando adversário</h2>
+      <p class="battle-hero-sub">Compartilhe este código com seu amigo:</p>
+      <div class="battle-code-display" id="battle-code-display">——</div>
+      <p style="font-size:12px;color:var(--muted);margin-top:4px">A batalha começa quando ele entrar</p>
+      <button class="btn btn-ghost btn-sm btn-danger" style="margin-top:16px" onclick="cancelRoom()">Cancelar sala</button>
+    </div>
+  </div>
+
+  <!-- Arena ativa — layout 3 colunas -->
+  <div id="battle-arena" style="display:none;width:100%;height:calc(100vh - 53px);overflow:hidden;">
+    <div class="bv3-layout">
+
+      <!-- ── Coluna esquerda: meu painel ── -->
+      <div class="bv3-side bv3-me" id="bv3-me-panel">
+        <div class="bv3-player-header">
+          <div class="bv3-avatar" id="bv3-me-avatar">🧊</div>
+          <div class="bv3-player-info">
+            <div class="bv3-player-name" id="bv3-me-name">Você</div>
+            <div class="bv3-player-time" id="bv3-me-time">—</div>
+            <div class="bv3-player-wins" id="bv3-me-wins">0W</div>
           </div>
         </div>
-      </div>
-
-      <!-- Players online -->
-      <div class="bln-online-strip">
-        <span class="online-dot"></span>
-        <span id="bln-online-count">0</span> jogadores online agora
-      </div>
-
-    </div>
-  </div>
-
-  <!-- Sala aguardando - redesenhada -->
-  <div id="battle-waiting" class="battle-section" style="display:none">
-    <div class="battle-waiting-new">
-      <div class="bwn-title">Sala criada!</div>
-      <div class="bwn-sub">Compartilhe este código com seu amigo</div>
-      <div class="battle-code-display" id="battle-code-display" onclick="copyBattleCode()" title="Clique para copiar">——</div>
-      <div class="bwn-hint">clique no código para copiar</div>
-      <div class="bwn-waiting-anim">
-        <div class="bwn-ring"></div>
-        <div class="bwn-ring-icon">⏳</div>
-      </div>
-      <div class="bwn-status">Aguardando adversário entrar...</div>
-      <button class="btn btn-ghost btn-sm btn-danger" style="margin-top:8px" onclick="cancelRoom()">Cancelar sala</button>
-    </div>
-  </div>
-
-  <!-- Arena ativa - redesenhada -->
-  <div id="battle-arena" class="battle-section" style="display:none">
-    <div class="battle-arena-new">
-
-      <!-- Topo: placar compacto -->
-      <div class="ban-scoreboard">
-        <div class="ban-player" id="ban-me">
-          <span class="ban-avatar" id="ban-me-avatar">🧊</span>
-          <span class="ban-name"  id="ban-me-name">Você</span>
-          <span class="ban-score" id="ban-me-score">—</span>
-          <span class="ban-wins"  id="ban-me-wins">0W</span>
-        </div>
-        <div class="ban-center">
-          <div class="ban-vs">VS</div>
-          <div class="ban-round">R<span id="battle-round">1</span></div>
-        </div>
-        <div class="ban-player ban-player-opp" id="ban-opp">
-          <span class="ban-avatar" id="ban-opp-avatar">❓</span>
-          <span class="ban-name"  id="ban-opp-name">Adversário</span>
-          <span class="ban-score" id="ban-opp-score">—</span>
-          <span class="ban-wins"  id="ban-opp-wins">0W</span>
+        <div class="bv3-history-list" id="bv3-me-history">
+          <div class="bv3-history-empty">Nenhum round ainda</div>
         </div>
       </div>
 
-      <!-- Scramble + prévia -->
-      <div class="ban-scramble-row">
-        <div class="ban-scramble-card">
-          <div class="ban-scramble-label">SCRAMBLE</div>
+      <!-- ── Coluna central: scramble + timer ── -->
+      <div class="bv3-center">
+        <!-- Scramble (some quando rodando) -->
+        <div class="bv3-scramble-card" id="bv3-scramble-card">
+          <div class="bv3-scramble-label">SCRAMBLE — ROUND <span id="battle-round">1</span></div>
           <div class="scramble-text" id="battle-scramble"></div>
         </div>
-        <div class="ban-net-preview" id="ban-net-preview">
-          <div class="ban-net-label">PRÉVIA</div>
-          <div id="ban-scramble-net"></div>
+        <!-- Mensagem de aguardo (aparece quando rodando) -->
+        <div class="bv3-waiting-msg" id="bv3-waiting-msg" style="display:none">
+          <div class="bv3-waiting-icon">⏳</div>
+          <div class="bv3-waiting-text">Aguardando finalizar round...</div>
         </div>
+
+        <div class="bv3-vs">VS</div>
+
+        <!-- Timer -->
+        <div class="bv3-timer-area">
+          <div class="timer-display idle" id="battle-timer"
+            ontouchstart="battleTouchDown(event)" ontouchend="battleTouchUp(event)">0.00</div>
+          <div class="timer-hint" id="battle-hint">segure <kbd>espaço</kbd> para iniciar &nbsp;·&nbsp; ou aperte <kbd>espaço</kbd> para inspecionar</div>
+        </div>
+        <div class="battle-status" id="battle-status"></div>
       </div>
 
-      <!-- Timer principal -->
-      <div class="ban-timer-area">
-        <div class="timer-display idle" id="battle-timer"
-          ontouchstart="battleTouchDown(event)" ontouchend="battleTouchUp(event)">0.00</div>
-        <div class="timer-hint" id="battle-hint">segure <kbd>espaço</kbd> para iniciar</div>
-      </div>
-
-      <!-- Status do round -->
-      <div class="battle-status" id="battle-status"></div>
-
-      <!-- Histórico dos últimos rounds (MD5) -->
-      <div class="ban-history-card" id="ban-history-card" style="display:none">
-        <div class="ban-history-label">HISTÓRICO DOS ROUNDS</div>
-        <div class="ban-history-list" id="ban-history-list"></div>
+      <!-- ── Coluna direita: painel adversário + prévia ── -->
+      <div class="bv3-side bv3-opp" id="bv3-opp-panel">
+        <div class="bv3-player-header bv3-opp-header">
+          <div class="bv3-player-info bv3-opp-info">
+            <div class="bv3-player-name" id="bv3-opp-name">Adversário</div>
+            <div class="bv3-player-time" id="bv3-opp-time">—</div>
+            <div class="bv3-player-wins" id="bv3-opp-wins">0W</div>
+          </div>
+          <div class="bv3-avatar" id="bv3-opp-avatar">❓</div>
+        </div>
+        <div class="bv3-history-list" id="bv3-opp-history">
+          <div class="bv3-history-empty">Nenhum round ainda</div>
+        </div>
+        <!-- Prévia do scramble -->
+        <div class="bv3-preview-card">
+          <div class="bv3-preview-label">PRÉVIA</div>
+          <div id="bv3-scramble-net"></div>
+        </div>
       </div>
 
     </div>
@@ -857,9 +916,6 @@
     </div>
   </div>
 </div>
-<script src="js/bluetooth.js"></script>
-
 <script src="js/app.js"></script>
 </body>
 </html>
-
