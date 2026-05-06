@@ -1,6 +1,6 @@
 //  STORAGE
 // ═══════════════════════════════════════════════
-const APP_VERSION = '1.7.0';
+const APP_VERSION = '0.9.2';
 const STORE_KEY   = 'cubetimer_v1';
 
 // ── Configurações (declarado cedo para evitar erros de hoisting) ──
@@ -2102,6 +2102,7 @@ async function initPresence() {
 //  MODO BATALHA
 // ═══════════════════════════════════════════════
 let battleRoom     = null;
+let battleRoundHistory = []; // { round, myMs, oppMs, won }
 let battleIsHost   = false;
 let battlePollId   = null;
 let battleTimerState = 'idle';
@@ -2215,31 +2216,55 @@ function startArena(scramble, round) {
   document.getElementById('battle-lobby').style.display   = 'none';
   document.getElementById('battle-waiting').style.display = 'none';
   document.getElementById('battle-arena').style.display   = 'flex';
+  document.getElementById('battle-topbar-round').style.display = 'block';
 
   myRoundDone = false; oppRoundDone = false; myRoundTime = null;
 
-  document.getElementById('battle-round').textContent   = round;
-  document.getElementById('battle-scramble').textContent = scramble;
-  document.getElementById('battle-timer').textContent    = '0.00';
-  document.getElementById('battle-timer').className      = 'timer-display idle';
-  document.getElementById('battle-hint').innerHTML       = 'segure <kbd>espaço</kbd> para iniciar';
+  // IDs novos do redesign
+  const g = id => document.getElementById(id);
+
+  g('battle-round').textContent      = round;
+  g('battle-round-top').textContent  = round;
+  g('battle-scramble').textContent   = scramble;
+  g('battle-timer').textContent      = '0.00';
+  g('battle-timer').className        = 'timer-display idle';
+  g('battle-hint').innerHTML         = 'segure <kbd>espaço</kbd> para iniciar';
   setBattleStatus('');
 
-  // Preenche info dos jogadores
-  const isHost = battleIsHost;
-  document.getElementById('bp-me-avatar').textContent  = myProfile.avatar;
-  document.getElementById('bp-me-name').textContent    = myProfile.nickname + ' (você)';
-  document.getElementById('bp-me-score').textContent   = '—';
-  document.getElementById('bp-me-wins').textContent    = myWins + ' vitórias';
-  document.getElementById('bp-opp-avatar').textContent = battleRoom.guest_avatar || battleRoom.host_avatar || '❓';
-  document.getElementById('bp-opp-name').textContent   = (battleIsHost ? battleRoom.guest_nickname : battleRoom.host_nickname) || 'Adversário';
-  document.getElementById('bp-opp-score').textContent  = '—';
-  document.getElementById('bp-opp-wins').textContent   = oppWins + ' vitórias';
+  // Placar compacto (novos IDs ban-*)
+  g('ban-me-avatar').textContent  = myProfile.avatar;
+  g('ban-me-name').textContent    = myProfile.nickname;
+  g('ban-me-score').textContent   = '—';
+  g('ban-me-wins').textContent    = myWins + 'W';
+  g('ban-me-score').className     = 'ban-score';
+  g('ban-me').className           = 'ban-player';
+
+  const oppNick   = (battleIsHost ? battleRoom.guest_nickname : battleRoom.host_nickname) || 'Adversário';
+  const oppAvatar = (battleIsHost ? battleRoom.guest_avatar   : battleRoom.host_avatar)   || '❓';
+  g('ban-opp-avatar').textContent = oppAvatar;
+  g('ban-opp-name').textContent   = oppNick;
+  g('ban-opp-score').textContent  = '—';
+  g('ban-opp-wins').textContent   = oppWins + 'W';
+  g('ban-opp-score').className    = 'ban-score';
+  g('ban-opp').className          = 'ban-player ban-player-opp';
+
+  // Prévia do scramble (reutiliza a função do modo normal)
+  const netEl = g('ban-scramble-net');
+  if (netEl && typeof applyScramble !== 'undefined') {
+    try {
+      const state = applyScramble(scramble);
+      netEl.innerHTML = renderScrambleNet(state);
+    } catch(e) { netEl.innerHTML = ''; }
+  }
+
+  // Histórico
+  updateBanHistory();
 }
 
 function updateBattleScore(myMs, oppMs) {
-  if (myMs  !== null) { document.getElementById('bp-me-score').textContent  = fmtTime(myMs);  document.getElementById('bp-me-score').className  = 'bp-score done'; }
-  if (oppMs !== null) { document.getElementById('bp-opp-score').textContent = fmtTime(oppMs); document.getElementById('bp-opp-score').className = 'bp-score done'; }
+  const g = id => document.getElementById(id);
+  if (myMs  !== null) { g('ban-me-score').textContent  = fmtTime(myMs);  g('ban-me-score').className  = 'ban-score done'; }
+  if (oppMs !== null) { g('ban-opp-score').textContent = fmtTime(oppMs); g('ban-opp-score').className = 'ban-score done'; }
 }
 
 function resolveRound(myMs, oppMs, room) {
@@ -2247,12 +2272,15 @@ function resolveRound(myMs, oppMs, room) {
   const iWon = myMs < oppMs;
   if (iWon) myWins++; else oppWins++;
 
-  document.getElementById('bp-me-wins').textContent  = myWins  + ' vitórias';
-  document.getElementById('bp-opp-wins').textContent = oppWins + ' vitórias';
-  document.getElementById('bp-me').classList.toggle('winning', iWon);
-  document.getElementById('bp-me').classList.toggle('losing',  !iWon);
-  document.getElementById('bp-opp').classList.toggle('winning', !iWon);
-  document.getElementById('bp-opp').classList.toggle('losing',  iWon);
+  const g = id => document.getElementById(id);
+  g('ban-me-wins').textContent  = myWins  + 'W';
+  g('ban-opp-wins').textContent = oppWins + 'W';
+  g('ban-me').className  = 'ban-player'           + (iWon  ? ' winning' : ' losing');
+  g('ban-opp').className = 'ban-player ban-player-opp' + (!iWon ? ' winning' : ' losing');
+
+  // Salva no histórico local
+  battleRoundHistory.push({ round: room.round || 1, myMs, oppMs, won: iWon });
+  updateBanHistory();
 
   if (iWon) setBattleStatus(`🏆 Você venceu o round! ${fmtTime(myMs)} vs ${fmtTime(oppMs)}`, 'winner');
   else       setBattleStatus(`😤 Adversário venceu. ${fmtTime(oppMs)} vs ${fmtTime(myMs)}`, 'loser');
@@ -2281,61 +2309,78 @@ function setBattleStatus(msg, cls) {
 
 // ── Timer da batalha ─────────────────────────
 function battlePressDown() {
+  const bt = document.getElementById('battle-timer');
+  const bh = document.getElementById('battle-hint');
+
+  // RODANDO → para o timer (igual ao modo normal: soltar para parar)
+  if (battleTimerState === 'running') return; // não para no pressDown, só no pressUp
+
+  // IDLE → inicia sequência hold
+  if (battleTimerState === 'idle') {
+    battleHoldReady  = false;
+    battleTimerState = 'holding';
+    bt.className = 'timer-display holding';
+    bh.innerHTML = 'continue segurando...';
+    battleHoldTimer = setTimeout(() => {
+      battleHoldReady  = true;
+      bt.className = 'timer-display ready';
+      bh.innerHTML = 'pode soltar!';
+    }, cfg.holdTime || 300);
+  }
+}
+
+function battlePressUp() {
+  const bt = document.getElementById('battle-timer');
+  const bh = document.getElementById('battle-hint');
+  clearTimeout(battleHoldTimer);
+
+  if (battleTimerState === 'holding') {
+    if (battleHoldReady) {
+      // Inicia corrida
+      battleTimerState = 'running';
+      battleStart = Date.now();
+      bt.className = 'timer-display running';
+      bh.innerHTML = 'solte <kbd>espaço</kbd> para parar';
+      const tick = () => {
+        if (battleTimerState !== 'running') return;
+        bt.textContent = fmtTime(Date.now() - battleStart);
+        battleRafId = requestAnimationFrame(tick);
+      };
+      battleRafId = requestAnimationFrame(tick);
+    } else {
+      battleTimerState = 'idle';
+      bt.className = 'timer-display idle';
+      bh.innerHTML = 'segure <kbd>espaço</kbd> para iniciar';
+    }
+    return;
+  }
+
   if (battleTimerState === 'running') {
     // Para o timer
     cancelAnimationFrame(battleRafId);
     const t = Date.now() - battleStart;
     battleTimerState = 'idle';
-    myRoundTime = t;
-    document.getElementById('battle-timer').textContent  = fmtTime(t);
-    document.getElementById('battle-timer').className    = 'timer-display idle';
-    document.getElementById('battle-hint').innerHTML     = '⏳ Aguardando adversário...';
+    myRoundTime      = t;
+    bt.textContent   = fmtTime(t);
+    bt.className     = 'timer-display idle';
+    bh.innerHTML     = '⏳ Aguardando adversário...';
     updateBattleScore(t, null);
-    setBattleStatus('Aguardando adversário finalizar...');
-    // Salva resultado
+    setBattleStatus('✅ Tempo enviado. Aguardando adversário...');
     sbInsertResult(battleRoom.id, MY_ID, battleRoom.round, t);
-    return;
-  }
-  if (battleTimerState === 'idle') {
-    battleHoldReady = false;
-    battleTimerState = 'holding';
-    document.getElementById('battle-timer').className = 'timer-display holding';
-    document.getElementById('battle-hint').innerHTML  = 'continue segurando...';
-    battleHoldTimer = setTimeout(() => {
-      battleHoldReady = true;
-      document.getElementById('battle-timer').className = 'timer-display ready';
-      document.getElementById('battle-hint').innerHTML  = 'pode soltar!';
-    }, 300);
-  }
-}
-
-function battlePressUp() {
-  clearTimeout(battleHoldTimer);
-  if (battleTimerState === 'holding') {
-    if (battleHoldReady) {
-      // Inicia timer
-      battleTimerState = 'running';
-      battleStart = Date.now();
-      document.getElementById('battle-timer').className = 'timer-display running';
-      document.getElementById('battle-hint').innerHTML  = 'aperte <kbd>espaço</kbd> para finalizar';
-      function tick() {
-        document.getElementById('battle-timer').textContent = fmtTime(Date.now() - battleStart);
-        battleRafId = requestAnimationFrame(tick);
-      }
-      battleRafId = requestAnimationFrame(tick);
-    } else {
-      battleTimerState = 'idle';
-      document.getElementById('battle-timer').className = 'timer-display idle';
-      document.getElementById('battle-hint').innerHTML  = 'segure <kbd>espaço</kbd> para iniciar';
-    }
   }
 }
 
 // ── Navegação da batalha ─────────────────────
 function showBattleLobby() {
+  battleRoundHistory = [];
   document.getElementById('battle-lobby').style.display   = 'flex';
   document.getElementById('battle-waiting').style.display = 'none';
   document.getElementById('battle-arena').style.display   = 'none';
+  document.getElementById('battle-topbar-round').style.display = 'none';
+  // Atualiza contagem online no lobby
+  const onlineCountEl = document.getElementById('bln-online-count');
+  const mainCount = document.getElementById('online-count');
+  if (onlineCountEl && mainCount) onlineCountEl.textContent = mainCount.textContent;
 }
 
 function showBattleWaiting(code) {
@@ -2373,6 +2418,31 @@ function battleKeyDown(e) {
 }
 function battleKeyUp(e) {
   if (e.code === 'Space') { e.preventDefault(); battlePressUp(); }
+}
+function battleTouchDown(e) { e.preventDefault(); battlePressDown(); }
+function battleTouchUp(e)   { e.preventDefault(); battlePressUp(); }
+
+function updateBanHistory() {
+  const card = document.getElementById('ban-history-card');
+  const list = document.getElementById('ban-history-list');
+  if (!card || !list) return;
+  if (!battleRoundHistory.length) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  // Mostra os últimos 5 rounds
+  const recent = battleRoundHistory.slice(-5);
+  list.innerHTML = recent.slice().reverse().map(r => `
+    <div class="ban-history-row ${r.won ? 'won' : 'lost'}">
+      <span class="ban-hr-round">R${r.round}</span>
+      <span class="ban-hr-me">${fmtTime(r.myMs)}</span>
+      <span class="ban-hr-opp">${fmtTime(r.oppMs)}</span>
+      <span class="ban-hr-result ${r.won ? 'w' : 'l'}">${r.won ? '🏆 Vitória' : '💔 Derrota'}</span>
+    </div>`).join('');
+}
+
+function copyBattleCode() {
+  const code = document.getElementById('battle-code-display').textContent;
+  if (navigator.clipboard) navigator.clipboard.writeText(code);
+  showToast('Código copiado: ' + code);
 }
 
 // ═══════════════════════════════════════════════
