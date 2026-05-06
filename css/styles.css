@@ -1114,3 +1114,172 @@
     .device-menu-status { margin-left: auto; flex-shrink: 0; }
     .device-menu-divider { height: 1px; background: var(--border); margin: 4px 0; }
     .device-menu-disconnect .device-menu-name { color: var(--danger); }
+
+    /* ═══════════════════════════════════════════════
+       BATALHA — REDESIGN
+    ═══════════════════════════════════════════════ */
+
+    /* ── Lobby novo ── */
+    .battle-lobby-new {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 24px; width: 100%; max-width: 520px; padding: 8px 0 32px;
+    }
+    .bln-header {
+      display: flex; align-items: center; gap: 16px;
+      background: var(--surface); border: 1px solid var(--border2);
+      border-radius: var(--rl); padding: 18px 24px; width: 100%;
+    }
+    .bln-icon { font-size: 40px; line-height: 1; flex-shrink: 0; }
+    .bln-title { font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--text); }
+    .bln-sub   { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+    .bln-cards { display: flex; flex-direction: column; gap: 0; width: 100%; }
+    .bln-card {
+      background: var(--surface); border: 1px solid var(--border2);
+      border-radius: var(--rl); padding: 20px 24px;
+      display: flex; flex-direction: column; gap: 6px;
+      transition: border-color .15s, box-shadow .15s; cursor: default;
+    }
+    .bln-card:hover { border-color: var(--accent); box-shadow: 0 0 20px rgba(212,242,68,.08); }
+    .bln-card-create { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom: none; }
+    .bln-card-join   { border-top-left-radius: 0; border-top-right-radius: 0; }
+    .bln-card-icon  { font-size: 28px; }
+    .bln-card-title { font-family: var(--mono); font-size: 15px; font-weight: 700; color: var(--text); }
+    .bln-card-desc  { font-size: 12px; color: var(--muted); }
+    .bln-card-btn {
+      align-self: flex-start; margin-top: 8px;
+      background: var(--accent); color: #000; border: none;
+      font-weight: 700; font-size: 13px; padding: 8px 20px;
+      border-radius: var(--r); cursor: pointer; transition: opacity .15s;
+    }
+    .bln-card-btn:hover { opacity: .85; }
+    .bln-card-divider {
+      display: flex; align-items: center; gap: 12px;
+      color: var(--muted); font-size: 12px; padding: 0 24px;
+      background: var(--surface); border-left: 1px solid var(--border2);
+      border-right: 1px solid var(--border2); height: 36px;
+    }
+    .bln-card-divider::before,
+    .bln-card-divider::after { content:''; flex:1; height:1px; background: var(--border2); }
+    .bln-join-input-row { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
+    .bln-code-input {
+      flex: 1; background: var(--bg); border: 1px solid var(--border2);
+      border-radius: var(--r); padding: 10px 14px; font-size: 18px;
+      color: var(--text); outline: none; transition: border-color .15s;
+    }
+    .bln-code-input:focus { border-color: var(--accent); }
+    .bln-online-strip {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; color: var(--muted); font-family: var(--mono);
+    }
+
+    /* ── Sala aguardando novo ── */
+    .battle-waiting-new {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 14px; max-width: 400px; width: 100%; text-align: center;
+    }
+    .bwn-title  { font-family: var(--mono); font-size: 22px; font-weight: 700; color: var(--accent); }
+    .bwn-sub    { font-size: 13px; color: var(--muted); }
+    .bwn-hint   { font-size: 11px; color: var(--muted); opacity: .6; }
+    .bwn-status { font-size: 13px; color: var(--muted); font-family: var(--mono); }
+    .bwn-waiting-anim {
+      position: relative; width: 64px; height: 64px;
+      display: flex; align-items: center; justify-content: center; margin: 4px 0;
+    }
+    .bwn-ring {
+      position: absolute; inset: 0; border-radius: 50%;
+      border: 3px solid transparent;
+      border-top-color: var(--accent);
+      border-right-color: rgba(212,242,68,.25);
+      animation: ranked-spin 1.2s linear infinite;
+    }
+    .bwn-ring-icon { font-size: 28px; }
+
+    /* ── Arena nova ── */
+    .battle-arena-new {
+      display: flex; flex-direction: column; gap: 14px;
+      width: 100%; max-width: 720px; padding: 4px 0 24px;
+    }
+
+    /* Placar compacto no topo */
+    .ban-scoreboard {
+      display: grid; grid-template-columns: 1fr auto 1fr;
+      align-items: center; gap: 8px;
+      background: var(--surface); border: 1px solid var(--border2);
+      border-radius: var(--rl); padding: 14px 16px;
+    }
+    .ban-player {
+      display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+    }
+    .ban-player-opp { align-items: flex-end; text-align: right; }
+    .ban-avatar { font-size: 24px; line-height: 1; }
+    .ban-name   { font-size: 12px; color: var(--muted); }
+    .ban-score  { font-family: var(--mono); font-size: 20px; font-weight: 700; color: var(--accent); }
+    .ban-score.done { color: var(--success); }
+    .ban-wins   { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+    .ban-center { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .ban-vs     { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--muted); }
+    .ban-round  { font-family: var(--mono); font-size: 11px; color: var(--accent); }
+    .ban-player.winning { }
+    .ban-player.winning .ban-score { color: var(--success); text-shadow: 0 0 16px rgba(74,219,138,.4); }
+    .ban-player.losing  .ban-score { color: var(--danger); }
+
+    /* Scramble + prévia lado a lado */
+    .ban-scramble-row {
+      display: grid; grid-template-columns: 1fr auto;
+      gap: 12px; align-items: start;
+    }
+    .ban-scramble-card {
+      background: var(--surface); border: 1px solid var(--border2);
+      border-radius: var(--rl); padding: 14px 16px;
+    }
+    .ban-scramble-label {
+      font-family: var(--mono); font-size: 9px; letter-spacing: 1.5px;
+      color: var(--muted); margin-bottom: 8px;
+    }
+    .ban-net-preview {
+      background: var(--surface); border: 1px solid var(--border2);
+      border-radius: var(--rl); padding: 10px 12px;
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      flex-shrink: 0;
+    }
+    .ban-net-label {
+      font-family: var(--mono); font-size: 9px; letter-spacing: 1.5px; color: var(--muted);
+    }
+
+    /* Timer area melhorada */
+    .ban-timer-area {
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+      background: var(--surface); border: 1px solid var(--border2);
+      border-radius: var(--rl); padding: 28px 20px;
+    }
+
+    /* Histórico dos rounds */
+    .ban-history-card {
+      background: var(--surface); border: 1px solid var(--border2);
+      border-radius: var(--rl); padding: 14px 16px;
+    }
+    .ban-history-label {
+      font-family: var(--mono); font-size: 9px; letter-spacing: 1.5px;
+      color: var(--muted); margin-bottom: 10px;
+    }
+    .ban-history-list { display: flex; flex-direction: column; gap: 6px; }
+    .ban-history-row {
+      display: grid; grid-template-columns: 28px 1fr 1fr 1fr;
+      align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px;
+      padding: 6px 8px; border-radius: var(--r); background: var(--bg);
+    }
+    .ban-history-row.won  { border-left: 2px solid var(--success); }
+    .ban-history-row.lost { border-left: 2px solid var(--danger); }
+    .ban-hr-round { color: var(--muted); font-size: 11px; }
+    .ban-hr-me    { color: var(--text); font-weight: 700; }
+    .ban-hr-opp   { color: var(--muted); }
+    .ban-hr-result { font-size: 11px; }
+    .ban-hr-result.w { color: var(--success); }
+    .ban-hr-result.l { color: var(--danger); }
+
+    @media (max-width: 760px) {
+      .ban-scramble-row { grid-template-columns: 1fr; }
+      .ban-net-preview  { display: none; }
+      .battle-lobby-new { padding: 8px 0 16px; }
+    }
