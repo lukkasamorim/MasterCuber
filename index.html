@@ -21,7 +21,7 @@
 <header class="header">
   <div class="header-left">
     <span class="logo">CubeTimer</span>
-    <span class="vbadge">v0.8.1</span>
+    <span class="vbadge">v0.9.2</span>
   </div>
   <div class="header-right">
     <button class="btn btn-ghost btn-sm" id="btn-show-preview" onclick="toggleScramblePreview()" title="Mostrar prévia do scramble" style="display:none">⬛ Prévia</button>
@@ -276,7 +276,7 @@
 <div id="page-login" class="login-page" style="display:none">
   <div class="login-inner">
     <div class="login-hero">
-      <div class="login-hero-badge">v1.8.0</div>
+      <div class="login-hero-badge">v1.9.0</div>
       <div class="login-hero-icon">🧊</div>
       <div class="login-hero-title">CubeTimer</div>
       <div class="login-hero-sub">Escolha um modo para começar.</div>
@@ -336,75 +336,121 @@
   <div class="battle-topbar">
     <button class="btn btn-ghost btn-sm" onclick="leaveBattle()">← Voltar</button>
     <div class="battle-topbar-title">⚔️ Modo Batalha</div>
-    <div style="width:80px"></div>
+    <div id="battle-topbar-round" style="font-family:var(--mono);font-size:12px;color:var(--muted);display:none">Round <span id="battle-round-top">1</span></div>
   </div>
 
-  <!-- Lobby -->
+  <!-- Lobby redesenhado -->
   <div id="battle-lobby" class="battle-section">
-    <div class="battle-lobby-inner">
-      <div class="battle-hero-icon">⚔️</div>
-      <h2 class="battle-hero-title">Modo Batalha</h2>
-      <p class="battle-hero-sub">Crie uma sala, compartilhe o código com seu amigo e disputem quem faz o melhor tempo!</p>
-      <button class="btn-complete" style="margin-top:8px" onclick="createRoom()">Criar Sala</button>
-      <div class="battle-divider"><span>ou</span></div>
-      <div class="battle-join-row">
-        <input class="modal-input" id="join-code" placeholder="Código da sala..." maxlength="6" style="text-transform:uppercase;letter-spacing:3px;text-align:center;font-family:var(--mono)" oninput="this.value=this.value.toUpperCase()" />
-        <button class="btn-complete" onclick="joinRoom()">Entrar</button>
+    <div class="battle-lobby-new">
+
+      <!-- Header -->
+      <div class="bln-header">
+        <div class="bln-icon">⚔️</div>
+        <div>
+          <div class="bln-title">Modo Batalha</div>
+          <div class="bln-sub">Dispute rounds em tempo real com um amigo</div>
+        </div>
       </div>
+
+      <!-- Cards de ação -->
+      <div class="bln-cards">
+        <div class="bln-card bln-card-create" onclick="createRoom()">
+          <div class="bln-card-icon">🏠</div>
+          <div class="bln-card-title">Criar Sala</div>
+          <div class="bln-card-desc">Gere um código e convide seu amigo</div>
+          <button class="bln-card-btn">Criar →</button>
+        </div>
+        <div class="bln-card-divider">ou</div>
+        <div class="bln-card bln-card-join">
+          <div class="bln-card-icon">🔑</div>
+          <div class="bln-card-title">Entrar em Sala</div>
+          <div class="bln-card-desc">Digite o código de 6 letras</div>
+          <div class="bln-join-input-row">
+            <input class="bln-code-input" id="join-code" placeholder="ABCDEF" maxlength="6"
+              style="text-transform:uppercase;letter-spacing:4px;text-align:center;font-family:var(--mono)"
+              oninput="this.value=this.value.toUpperCase()"
+              onkeydown="if(event.key==='Enter') joinRoom()" />
+            <button class="bln-card-btn" onclick="joinRoom()">Entrar →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Players online -->
+      <div class="bln-online-strip">
+        <span class="online-dot"></span>
+        <span id="bln-online-count">0</span> jogadores online agora
+      </div>
+
     </div>
   </div>
 
-  <!-- Sala aguardando -->
+  <!-- Sala aguardando - redesenhada -->
   <div id="battle-waiting" class="battle-section" style="display:none">
-    <div class="battle-lobby-inner">
-      <div class="battle-hero-icon">⏳</div>
-      <h2 class="battle-hero-title">Aguardando adversário</h2>
-      <p class="battle-hero-sub">Compartilhe este código com seu amigo:</p>
-      <div class="battle-code-display" id="battle-code-display">——</div>
-      <p style="font-size:12px;color:var(--muted);margin-top:4px">A batalha começa quando ele entrar</p>
-      <button class="btn btn-ghost btn-sm btn-danger" style="margin-top:16px" onclick="cancelRoom()">Cancelar sala</button>
+    <div class="battle-waiting-new">
+      <div class="bwn-title">Sala criada!</div>
+      <div class="bwn-sub">Compartilhe este código com seu amigo</div>
+      <div class="battle-code-display" id="battle-code-display" onclick="copyBattleCode()" title="Clique para copiar">——</div>
+      <div class="bwn-hint">clique no código para copiar</div>
+      <div class="bwn-waiting-anim">
+        <div class="bwn-ring"></div>
+        <div class="bwn-ring-icon">⏳</div>
+      </div>
+      <div class="bwn-status">Aguardando adversário entrar...</div>
+      <button class="btn btn-ghost btn-sm btn-danger" style="margin-top:8px" onclick="cancelRoom()">Cancelar sala</button>
     </div>
   </div>
 
-  <!-- Arena ativa -->
+  <!-- Arena ativa - redesenhada -->
   <div id="battle-arena" class="battle-section" style="display:none">
-    <div class="battle-arena-inner">
+    <div class="battle-arena-new">
 
-      <!-- Scramble -->
-      <div class="battle-scramble-card">
-        <span class="plabel">SCRAMBLE — ROUND <span id="battle-round">1</span></span>
-        <div class="scramble-text" id="battle-scramble" style="margin-top:8px"></div>
-      </div>
-
-      <!-- Placar -->
-      <div class="battle-scoreboard">
-        <div class="battle-player-card" id="bp-me">
-          <div class="bp-avatar" id="bp-me-avatar">🧊</div>
-          <div class="bp-info">
-            <div class="bp-name" id="bp-me-name">Você</div>
-            <div class="bp-score" id="bp-me-score">—</div>
-          </div>
-          <div class="bp-wins" id="bp-me-wins">0 vitórias</div>
+      <!-- Topo: placar compacto -->
+      <div class="ban-scoreboard">
+        <div class="ban-player" id="ban-me">
+          <span class="ban-avatar" id="ban-me-avatar">🧊</span>
+          <span class="ban-name"  id="ban-me-name">Você</span>
+          <span class="ban-score" id="ban-me-score">—</span>
+          <span class="ban-wins"  id="ban-me-wins">0W</span>
         </div>
-        <div class="battle-vs">VS</div>
-        <div class="battle-player-card" id="bp-opp">
-          <div class="bp-avatar" id="bp-opp-avatar">❓</div>
-          <div class="bp-info">
-            <div class="bp-name" id="bp-opp-name">Adversário</div>
-            <div class="bp-score" id="bp-opp-score">—</div>
-          </div>
-          <div class="bp-wins" id="bp-opp-wins">0 vitórias</div>
+        <div class="ban-center">
+          <div class="ban-vs">VS</div>
+          <div class="ban-round">R<span id="battle-round">1</span></div>
+        </div>
+        <div class="ban-player ban-player-opp" id="ban-opp">
+          <span class="ban-avatar" id="ban-opp-avatar">❓</span>
+          <span class="ban-name"  id="ban-opp-name">Adversário</span>
+          <span class="ban-score" id="ban-opp-score">—</span>
+          <span class="ban-wins"  id="ban-opp-wins">0W</span>
         </div>
       </div>
 
-      <!-- Timer de batalha -->
-      <div class="battle-timer-area">
-        <div class="timer-display idle" id="battle-timer">0.00</div>
+      <!-- Scramble + prévia -->
+      <div class="ban-scramble-row">
+        <div class="ban-scramble-card">
+          <div class="ban-scramble-label">SCRAMBLE</div>
+          <div class="scramble-text" id="battle-scramble"></div>
+        </div>
+        <div class="ban-net-preview" id="ban-net-preview">
+          <div class="ban-net-label">PRÉVIA</div>
+          <div id="ban-scramble-net"></div>
+        </div>
+      </div>
+
+      <!-- Timer principal -->
+      <div class="ban-timer-area">
+        <div class="timer-display idle" id="battle-timer"
+          ontouchstart="battleTouchDown(event)" ontouchend="battleTouchUp(event)">0.00</div>
         <div class="timer-hint" id="battle-hint">segure <kbd>espaço</kbd> para iniciar</div>
       </div>
 
       <!-- Status do round -->
       <div class="battle-status" id="battle-status"></div>
+
+      <!-- Histórico dos últimos rounds (MD5) -->
+      <div class="ban-history-card" id="ban-history-card" style="display:none">
+        <div class="ban-history-label">HISTÓRICO DOS ROUNDS</div>
+        <div class="ban-history-list" id="ban-history-list"></div>
+      </div>
 
     </div>
   </div>
